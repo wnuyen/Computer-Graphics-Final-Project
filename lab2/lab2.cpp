@@ -91,6 +91,7 @@ static GLuint LoadSkyboxTexture(const char *texture_file_path) {
 #include <../lab2/Skybox/skybox.h>
 #include <../lab2/Ground/ground.h>
 #include <../lab2/Snow/snow.h>
+#include <../lab2/Tree/tree.h>
 #include <../lab2/Building/building.h>
 
 
@@ -147,6 +148,9 @@ int main(void)
     Snow snow;
     snow.initialize();
 
+    Tree tree;
+    tree.initialize(1000, 1000.0f);
+
     glm::mat4 viewMatrix, projectionMatrix;
     glm::float32 FoV = 45;
     glm::float32 zNear = 0.1f;
@@ -182,6 +186,8 @@ int main(void)
 
         snow.render(viewMatrix, projectionMatrix, deltaTime, cameraPos);
 
+        tree.render(viewMatrix, projectionMatrix, cameraPos);
+
         // FPS tracking
         // Count number of frames over a few seconds and take average
         frames++;
@@ -205,6 +211,7 @@ int main(void)
     skybox.cleanup();
     ground.cleanup();
     snow.cleanup();
+    tree.cleanup();
 
     glfwTerminate();
 
