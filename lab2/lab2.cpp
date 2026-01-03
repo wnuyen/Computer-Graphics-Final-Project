@@ -80,6 +80,7 @@ static GLuint LoadSkyboxTexture(const char *texture_file_path) {
 }
 
 #include <../lab2/Skybox/skybox.h>
+#include <../lab2/Ground/ground.h>
 #include <../lab2/Building/building.h>
 
 
@@ -128,50 +129,11 @@ int main(void)
 	Skybox skybox;
 	skybox.initialize();
 
-	// TODO: Create more buildings
-    // ---------------------------
-	// In main(), before the render loop...
+	Ground ground;
+	// Scale 50 creates a 100x100 unit chunk (since geometry is -1 to 1)
+	ground.initialize(glm::vec3(50.0f, 1.0f, 50.0f));
 
-	// 1. Store your building objects
-	std::vector<Building> buildings;
 
-	// 2. Create a list of texture files to randomly choose from
-	std::vector<const char*> texture_paths;
-	texture_paths.push_back("../lab2/images/facade1.jpg");
-	texture_paths.push_back("../lab2/images/facade2.jpg");
-	texture_paths.push_back("../lab2/images/facade3.jpg");
-	texture_paths.push_back("../lab2/images/facade4.jpg");
-
-	// 3. Generation Loop
-	int grid_size = 10;
-	float spacing = 50.0f; // Distance between buildings
-
-	for (int x = -grid_size / 2; x < grid_size / 2; ++x) {
-		for (int z = -grid_size / 2; z < grid_size / 2; ++z) {
-
-			// Calculate building position
-			glm::vec3 pos(x * spacing, 0, z * spacing);
-
-			// Randomize scale for variety
-			float base_width = 10.0f + (rand() % 15); // Width between 10 and 25
-			float height = 10.0f + (rand() % 80);   // Height between 40 and 120
-			glm::vec3 scale(base_width, height, base_width);
-
-			// Randomly select a texture
-			const char* texture_path = texture_paths[rand() % texture_paths.size()];
-
-			// Create and initialize the building
-			Building b;
-			b.initialize(pos, scale, texture_path);
-
-			// Add the new building to our vector
-			buildings.push_back(b);
-		}
-	}
-
-    // ---------------------------
-
-	// Camera setup
     eye_center.y = viewDistance * cos(viewPolar);
     eye_center.x = viewDistance * cos(viewAzimuth);
     eye_center.z = viewDistance * sin(viewAzimuth);
@@ -197,10 +159,8 @@ int main(void)
 
 		glm::mat4 vp = projectionMatrix * viewMatrix;
 
-		// Render the building
-		for (auto& b : buildings) {
-			b.render(vp);
-		}
+		// In render loop
+		ground.render(viewMatrix, projectionMatrix, eye_center);
 
 		// Swap buffers
 		glfwSwapBuffers(window);
@@ -211,9 +171,7 @@ int main(void)
 
 	// Clean up
 	skybox.cleanup();
-	for (auto& b : buildings) {
-		b.cleanup();
-	}
+	ground.cleanup();
 
 	// Close OpenGL window and terminate GLFW
 	glfwTerminate();
