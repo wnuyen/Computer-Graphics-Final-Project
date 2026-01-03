@@ -88,6 +88,8 @@ struct Ground {
 	void render(const glm::mat4& viewMatrix, const glm::mat4& projectionMatrix, glm::vec3 cameraPosition) {
 		glUseProgram(programID);
 
+		glBindVertexArray(vertexArrayID);
+
 		// 1. Bind Buffers
 		glEnableVertexAttribArray(0);
 		glBindBuffer(GL_ARRAY_BUFFER, vertexBufferID);
@@ -145,6 +147,8 @@ struct Ground {
 		glDisableVertexAttribArray(0);
 		glDisableVertexAttribArray(1);
 		glDisableVertexAttribArray(2);
+
+		glBindVertexArray(0);
 	}
 
 	void cleanup() {

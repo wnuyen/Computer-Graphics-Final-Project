@@ -90,6 +90,7 @@ static GLuint LoadSkyboxTexture(const char *texture_file_path) {
 
 #include <../lab2/Skybox/skybox.h>
 #include <../lab2/Ground/ground.h>
+#include <../lab2/Snow/snow.h>
 #include <../lab2/Building/building.h>
 
 
@@ -136,11 +137,15 @@ int main(void)
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_CULL_FACE);
 
+
     Skybox skybox;
     skybox.initialize();
 
     Ground ground;
     ground.initialize(glm::vec3(50.0f, 1.0f, 50.0f));
+
+    Snow snow;
+    snow.initialize();
 
     glm::mat4 viewMatrix, projectionMatrix;
     glm::float32 FoV = 45;
@@ -175,6 +180,8 @@ int main(void)
         // Render Ground
         ground.render(viewMatrix, projectionMatrix, cameraPos);
 
+        snow.render(viewMatrix, projectionMatrix, deltaTime, cameraPos);
+
         // FPS tracking
         // Count number of frames over a few seconds and take average
         frames++;
@@ -197,6 +204,7 @@ int main(void)
 
     skybox.cleanup();
     ground.cleanup();
+    snow.cleanup();
 
     glfwTerminate();
 

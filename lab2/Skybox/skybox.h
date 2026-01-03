@@ -74,6 +74,8 @@ struct Skybox {
 
        glUseProgram(programID);
 
+       glBindVertexArray(vertexArrayID);
+
        glEnableVertexAttribArray(0); // Vertex positions
        glBindBuffer(GL_ARRAY_BUFFER, vertexBufferID);
        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, 0);
@@ -95,6 +97,8 @@ struct Skybox {
 
        glDisableVertexAttribArray(0);
        glDisableVertexAttribArray(2);
+
+       glBindVertexArray(0);
 
        // Set depth function back to default
        glDepthFunc(GL_LESS);
