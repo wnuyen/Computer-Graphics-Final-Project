@@ -15,17 +15,27 @@
 
 static GLFWwindow *window;
 static void key_callback(GLFWwindow *window, int key, int scancode, int action, int mode);
+static void mouse_callback(GLFWwindow* window, double xpos, double ypos);
+static void processInput(GLFWwindow *window);
 
-// OpenGL camera view parameters
-static glm::vec3 eye_center;
-static glm::vec3 lookat(0, 0, 0);
-static glm::vec3 up(0, 1, 0);
+// --- Camera System Variables ---
+// Camera Position & Direction
+static glm::vec3 cameraPos   = glm::vec3(0.0f, 10.0f, 150.0f); // Start slightly up and back
+static glm::vec3 cameraFront = glm::vec3(0.0f, 0.0f, -1.0f);
+static glm::vec3 cameraUp    = glm::vec3(0.0f, 1.0f, 0.0f);
 
-// View control
-static float viewAzimuth = 0.f;
-static float viewPolar = 0.f;
-static float viewDistance = 450.0f;
+// Mouse State
+static bool firstMouse = true;
+static float yaw   = -90.0f;	// Yaw is initialized to -90.0 degrees since a yaw of 0.0 results in a direction vector pointing to the right
+static float pitch =  0.0f;
+static float lastX =  1024.0f / 2.0;
+static float lastY =  768.0f / 2.0;
 
+// Timing (for smooth movement)
+static float deltaTime = 0.0f;	// Time between current frame and last frame
+static float lastFrame = 0.0f;
+
+// -------------------------------
 
 static GLuint LoadTextureTileBox(const char *texture_file_path) {
     int w, h, channels;
@@ -34,7 +44,6 @@ static GLuint LoadTextureTileBox(const char *texture_file_path) {
     glGenTextures(1, &texture);
     glBindTexture(GL_TEXTURE_2D, texture);
 
-    // To tile textures on a Building, we set wrapping to repeat
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
@@ -52,31 +61,29 @@ static GLuint LoadTextureTileBox(const char *texture_file_path) {
 }
 
 static GLuint LoadSkyboxTexture(const char *texture_file_path) {
-	int w, h, channels;
-	// Load image, and flip it vertically to match OpenGL's coordinate system
-	stbi_set_flip_vertically_on_load(true);
-	uint8_t* img = stbi_load(texture_file_path, &w, &h, &channels, 0);
-	stbi_set_flip_vertically_on_load(false); // Set back to default
+    int w, h, channels;
+    stbi_set_flip_vertically_on_load(true);
+    uint8_t* img = stbi_load(texture_file_path, &w, &h, &channels, 0);
+    stbi_set_flip_vertically_on_load(false);
 
-	GLuint textureID;
-	glGenTextures(1, &textureID);
-	glBindTexture(GL_TEXTURE_2D, textureID);
+    GLuint textureID;
+    glGenTextures(1, &textureID);
+    glBindTexture(GL_TEXTURE_2D, textureID);
 
-	// For a skybox, we clamp to the edge to prevent seams at the corners
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
-	if (img) {
-		GLenum format = (channels == 4) ? GL_RGBA : GL_RGB;
-		glTexImage2D(GL_TEXTURE_2D, 0, format, w, h, 0, format, GL_UNSIGNED_BYTE, img);
-	} else {
-		std::cout << "Failed to load texture " << texture_file_path << std::endl;
-	}
-	stbi_image_free(img);
+    if (img) {
+        GLenum format = (channels == 4) ? GL_RGBA : GL_RGB;
+        glTexImage2D(GL_TEXTURE_2D, 0, format, w, h, 0, format, GL_UNSIGNED_BYTE, img);
+    } else {
+        std::cout << "Failed to load texture " << texture_file_path << std::endl;
+    }
+    stbi_image_free(img);
 
-	return textureID;
+    return textureID;
 }
 
 #include <../lab2/Skybox/skybox.h>
@@ -86,138 +93,176 @@ static GLuint LoadSkyboxTexture(const char *texture_file_path) {
 
 int main(void)
 {
-	// Initialise GLFW
-	if (!glfwInit())
-	{
-		std::cerr << "Failed to initialize GLFW." << std::endl;
-		return -1;
-	}
+    if (!glfwInit())
+    {
+        std::cerr << "Failed to initialize GLFW." << std::endl;
+        return -1;
+    }
 
-	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
-	glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE); // For MacOS
-	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
+    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-	// Open a window and create its OpenGL context
-	window = glfwCreateWindow(1024, 768, "Lab 2", NULL, NULL);
-	if (window == NULL)
-	{
-		std::cerr << "Failed to open a GLFW window." << std::endl;
-		glfwTerminate();
-		return -1;
-	}
-	glfwMakeContextCurrent(window);
+    window = glfwCreateWindow(1024, 768, "Lab 2", NULL, NULL);
+    if (window == NULL)
+    {
+        std::cerr << "Failed to open a GLFW window." << std::endl;
+        glfwTerminate();
+        return -1;
+    }
+    glfwMakeContextCurrent(window);
 
-	// Ensure we can capture the escape key being pressed below
-	glfwSetInputMode(window, GLFW_STICKY_KEYS, GL_TRUE);
-	glfwSetKeyCallback(window, key_callback);
+    // --- INPUT SETUP ---
+    glfwSetInputMode(window, GLFW_STICKY_KEYS, GL_TRUE);
+    // Hide cursor and capture it (FPS style)
+    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
-	// Load OpenGL functions, gladLoadGL returns the loaded version, 0 on error.
-	int version = gladLoadGL(glfwGetProcAddress);
-	if (version == 0)
-	{
-		std::cerr << "Failed to initialize OpenGL context." << std::endl;
-		return -1;
-	}
+    // Set callbacks
+    glfwSetKeyCallback(window, key_callback);
+    glfwSetCursorPosCallback(window, mouse_callback);
+    // -------------------
 
-	// Background
-	glClearColor(0.2f, 0.2f, 0.25f, 0.0f);
+    int version = gladLoadGL(glfwGetProcAddress);
+    if (version == 0)
+    {
+        std::cerr << "Failed to initialize OpenGL context." << std::endl;
+        return -1;
+    }
 
-	glEnable(GL_DEPTH_TEST);
-	glEnable(GL_CULL_FACE);
+    glClearColor(0.2f, 0.2f, 0.25f, 0.0f);
+    glEnable(GL_DEPTH_TEST);
+    glEnable(GL_CULL_FACE);
 
-	Skybox skybox;
-	skybox.initialize();
+    Skybox skybox;
+    skybox.initialize();
 
-	Ground ground;
-	// Scale 50 creates a 100x100 unit chunk (since geometry is -1 to 1)
-	ground.initialize(glm::vec3(50.0f, 1.0f, 50.0f));
+    Ground ground;
+    ground.initialize(glm::vec3(50.0f, 1.0f, 50.0f));
 
-
-    eye_center.y = viewDistance * cos(viewPolar);
-    eye_center.x = viewDistance * cos(viewAzimuth);
-    eye_center.z = viewDistance * sin(viewAzimuth);
-
-	glm::mat4 viewMatrix, projectionMatrix;
+    glm::mat4 viewMatrix, projectionMatrix;
     glm::float32 FoV = 45;
-	glm::float32 zNear = 0.1f;
-	glm::float32 zFar = 1000.0f;
-	projectionMatrix = glm::perspective(glm::radians(FoV), 4.0f / 3.0f, zNear, zFar);
+    glm::float32 zNear = 0.1f;
+    glm::float32 zFar = 1000.0f;
+    projectionMatrix = glm::perspective(glm::radians(FoV), 4.0f / 3.0f, zNear, zFar);
 
-	do
-	{
-		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    do
+    {
+        // Calculate deltaTime
+        float currentFrame = (float)glfwGetTime();
+        deltaTime = currentFrame - lastFrame;
+        lastFrame = currentFrame;
 
-		viewMatrix = glm::lookAt(eye_center, lookat, up);
+        // Process movement inputs (Arrow Keys)
+        processInput(window);
 
-		glm::mat4 skyboxViewMatrix = glm::mat4(glm::mat3(viewMatrix));
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-		glCullFace(GL_FRONT); // Cull front faces for the skybox
-		skybox.render(skyboxViewMatrix, projectionMatrix);
-		glCullFace(GL_BACK);  // Reset to default for the rest of the scene
+        // Update View Matrix (Look from Camera Position, to Position + Front Vector)
+        viewMatrix = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
 
+        glm::mat4 skyboxViewMatrix = glm::mat4(glm::mat3(viewMatrix));
 
-		glm::mat4 vp = projectionMatrix * viewMatrix;
+        glCullFace(GL_FRONT);
+        skybox.render(skyboxViewMatrix, projectionMatrix);
+        glCullFace(GL_BACK);
 
-		// In render loop
-		ground.render(viewMatrix, projectionMatrix, eye_center);
+        // Render Ground
+        ground.render(viewMatrix, projectionMatrix, cameraPos);
 
-		// Swap buffers
-		glfwSwapBuffers(window);
-		glfwPollEvents();
+        glfwSwapBuffers(window);
+        glfwPollEvents();
 
-	} // Check if the ESC key was pressed or the window was closed
-	while (!glfwWindowShouldClose(window));
+    }
+    while (!glfwWindowShouldClose(window));
 
-	// Clean up
-	skybox.cleanup();
-	ground.cleanup();
+    skybox.cleanup();
+    ground.cleanup();
 
-	// Close OpenGL window and terminate GLFW
-	glfwTerminate();
+    glfwTerminate();
 
-	return 0;
+    return 0;
 }
 
-// Is called whenever a key is pressed/released via GLFW
+// --------------------------------------------------------------------------------
+// NEW: Input Processing Function for Smooth Movement
+// --------------------------------------------------------------------------------
+void processInput(GLFWwindow *window)
+{
+    // Speed adjusted by deltaTime for consistency across framerates
+    float cameraSpeed = 100.0f * deltaTime;
+
+    // Move Forward
+    if (glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS)
+        cameraPos += cameraSpeed * cameraFront;
+
+    // Move Backward
+    if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS)
+        cameraPos -= cameraSpeed * cameraFront;
+
+    // Strafe Left
+    if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS)
+        cameraPos -= glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed;
+
+    // Strafe Right
+    if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS)
+        cameraPos += glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed;
+}
+
+// --------------------------------------------------------------------------------
+// NEW: Mouse Callback for Rotation (Look)
+// --------------------------------------------------------------------------------
+void mouse_callback(GLFWwindow* window, double xposIn, double yposIn)
+{
+    float xpos = static_cast<float>(xposIn);
+    float ypos = static_cast<float>(yposIn);
+
+    if (firstMouse)
+    {
+        lastX = xpos;
+        lastY = ypos;
+        firstMouse = false;
+    }
+
+    float xoffset = xpos - lastX;
+    float yoffset = lastY - ypos; // Reversed since y-coordinates go from bottom to top
+    lastX = xpos;
+    lastY = ypos;
+
+    float sensitivity = 0.1f;
+    xoffset *= sensitivity;
+    yoffset *= sensitivity;
+
+    yaw += xoffset;
+    pitch += yoffset;
+
+    // Constrain pitch so screen doesn't flip
+    if (pitch > 89.0f)
+        pitch = 89.0f;
+    if (pitch < -89.0f)
+        pitch = -89.0f;
+
+    glm::vec3 front;
+    front.x = cos(glm::radians(yaw)) * cos(glm::radians(pitch));
+    front.y = sin(glm::radians(pitch));
+    front.z = sin(glm::radians(yaw)) * cos(glm::radians(pitch));
+    cameraFront = glm::normalize(front);
+}
+
+// --------------------------------------------------------------------------------
+// Key Callback (Handles single events like Quit or Reset)
+// --------------------------------------------------------------------------------
 void key_callback(GLFWwindow *window, int key, int scancode, int action, int mode)
 {
-	if (key == GLFW_KEY_R && action == GLFW_PRESS)
-	{
-		viewAzimuth = 0.f;
-		viewPolar = 0.f;
-		eye_center.y = viewDistance * cos(viewPolar);
-		eye_center.x = viewDistance * cos(viewAzimuth);
-		eye_center.z = viewDistance * sin(viewAzimuth);
-		std::cout << "Reset." << std::endl;
-	}
+    if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
+        glfwSetWindowShouldClose(window, GL_TRUE);
 
-	if (key == GLFW_KEY_UP && (action == GLFW_REPEAT || action == GLFW_PRESS))
-	{
-		viewPolar -= 0.1f;
-		eye_center.y = viewDistance * cos(viewPolar);
-	}
-
-	if (key == GLFW_KEY_DOWN && (action == GLFW_REPEAT || action == GLFW_PRESS))
-	{
-		viewPolar += 0.1f;
-		eye_center.y = viewDistance * cos(viewPolar);
-	}
-
-	if (key == GLFW_KEY_LEFT && (action == GLFW_REPEAT || action == GLFW_PRESS))
-	{
-		viewAzimuth -= 0.1f;
-		eye_center.x = viewDistance * cos(viewAzimuth);
-		eye_center.z = viewDistance * sin(viewAzimuth);
-	}
-
-	if (key == GLFW_KEY_RIGHT && (action == GLFW_REPEAT || action == GLFW_PRESS))
-	{
-		viewAzimuth += 0.1f;
-		eye_center.x = viewDistance * cos(viewAzimuth);
-		eye_center.z = viewDistance * sin(viewAzimuth);
-	}
-
-	if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
-		glfwSetWindowShouldClose(window, GL_TRUE);
+    // Optional: Reset camera position
+    if (key == GLFW_KEY_R && action == GLFW_PRESS) {
+        cameraPos   = glm::vec3(0.0f, 10.0f, 150.0f);
+        cameraFront = glm::vec3(0.0f, 0.0f, -1.0f);
+        yaw = -90.0f;
+        pitch = 0.0f;
+        firstMouse = true;
+    }
 }
