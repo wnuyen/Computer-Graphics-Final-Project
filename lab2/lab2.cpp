@@ -185,7 +185,7 @@ int main(void)
 }
 
 // --------------------------------------------------------------------------------
-// NEW: Input Processing Function for Smooth Movement
+// Input Processing with Height Constraints
 // --------------------------------------------------------------------------------
 void processInput(GLFWwindow *window)
 {
@@ -207,10 +207,22 @@ void processInput(GLFWwindow *window)
     // Strafe Right
     if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS)
         cameraPos += glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed;
+
+    // --- Height Constraints ---
+    // Prevent going below ground (assuming ground is at y=0)
+    // We keep it slightly above 0 (e.g., 2.0f) so we don't clip into the floor texture.
+    if (cameraPos.y < 2.0f) {
+        cameraPos.y = 2.0f;
+    }
+
+    // Prevent going too high
+    if (cameraPos.y > 100.0f) {
+        cameraPos.y = 100.0f;
+    }
 }
 
 // --------------------------------------------------------------------------------
-// NEW: Mouse Callback for Rotation (Look)
+// Mouse Callback for Rotation (Look)
 // --------------------------------------------------------------------------------
 void mouse_callback(GLFWwindow* window, double xposIn, double yposIn)
 {
