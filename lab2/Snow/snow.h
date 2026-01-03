@@ -80,13 +80,20 @@ struct Snow {
             float drift = sin(p.position.y * 0.5f + p.wobbleOffset) * deltaTime * 2.0f;
             p.position.x += drift;
 
-            // 2. Respawn Logic (Infinite Snow)
-            // If flake is too low OR too far from camera (player walked away)
             float distXZ = glm::distance(glm::vec2(p.position.x, p.position.z), glm::vec2(cameraPos.x, cameraPos.z));
 
-            if (p.position.y < 0.0f || distXZ > spawnRange) {
-                // Respawn above the camera with random offset
-                p.position.y = cameraPos.y + spawnHeight; // Reset height relative to camera
+            // CASE 1: Snow hit the ground (Natural cycle)
+            // It fell all the way down, so put it back at the top to fall again.
+            if (p.position.y < 0.0f) {
+                p.position.y = cameraPos.y + spawnHeight;
+                p.position.x = cameraPos.x + ((float)rand() / RAND_MAX * 2.0f - 1.0f) * spawnRange;
+                p.position.z = cameraPos.z + ((float)rand() / RAND_MAX * 2.0f - 1.0f) * spawnRange;
+            }
+            // CASE 2: You walked away (Distance check)
+            // The snow is too far, so bring it close.
+            // IMPORTANT: Pick a RANDOM height so it appears mid-air instantly!
+            else if (distXZ > spawnRange) {
+                p.position.y = cameraPos.y + ((float)rand() / RAND_MAX) * spawnHeight; // <--- This fixes the waiting
                 p.position.x = cameraPos.x + ((float)rand() / RAND_MAX * 2.0f - 1.0f) * spawnRange;
                 p.position.z = cameraPos.z + ((float)rand() / RAND_MAX * 2.0f - 1.0f) * spawnRange;
             }

@@ -64,7 +64,7 @@ struct Skybox {
        projectionMatrixID = glGetUniformLocation(programID, "projection");
        textureSamplerID = glGetUniformLocation(programID, "skybox");
 
-       textureID = LoadSkyboxTexture("../lab2/images/sky.png");
+       textureID = LoadSkyboxTexture("../lab2/images/snow_mountains.jpg");
     }
 
     void render(glm::mat4 viewMatrix, glm::mat4 projectionMatrix) {

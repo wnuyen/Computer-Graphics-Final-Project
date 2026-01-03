@@ -51,7 +51,7 @@ struct Ground {
 
 	void initialize(glm::vec3 scale) {
 		this->scale = scale;
-		textureID = LoadTextureTileBox("../lab2/images/grass.jpg");
+		textureID = LoadTextureTileBox("../lab2/images/snow.jpg");
 
 		// Vertex Arrays and Buffers setup...
 		glGenVertexArrays(1, &vertexArrayID);
