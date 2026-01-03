@@ -12,6 +12,8 @@
 #include <iostream>
 #define _USE_MATH_DEFINES
 #include <math.h>
+#include <sstream>
+#include <iomanip>
 
 static GLFWwindow *window;
 static void key_callback(GLFWwindow *window, int key, int scancode, int action, int mode);
@@ -104,7 +106,7 @@ int main(void)
     glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-    window = glfwCreateWindow(1024, 768, "Lab 2", NULL, NULL);
+    window = glfwCreateWindow(1024, 768, "Final Project", NULL, NULL);
     if (window == NULL)
     {
         std::cerr << "Failed to open a GLFW window." << std::endl;
@@ -146,6 +148,9 @@ int main(void)
     glm::float32 zFar = 1000.0f;
     projectionMatrix = glm::perspective(glm::radians(FoV), 4.0f / 3.0f, zNear, zFar);
 
+    int frames = 0;
+    float fTime = 0.0f;
+
     do
     {
         // Calculate deltaTime
@@ -169,6 +174,20 @@ int main(void)
 
         // Render Ground
         ground.render(viewMatrix, projectionMatrix, cameraPos);
+
+        // FPS tracking
+        // Count number of frames over a few seconds and take average
+        frames++;
+        fTime += deltaTime;
+        if (fTime > 2.0f) {
+            float fps = frames / fTime;
+            frames = 0;
+            fTime = 0;
+
+            std::stringstream stream;
+            stream << std::fixed << std::setprecision(2) << "Final Project | Frames per second (FPS): " << fps;
+            glfwSetWindowTitle(window, stream.str().c_str());
+        }
 
         glfwSwapBuffers(window);
         glfwPollEvents();
