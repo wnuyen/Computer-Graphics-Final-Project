@@ -26,6 +26,14 @@ static glm::vec3 cameraPos   = glm::vec3(0.0f, 10.0f, 150.0f); // Start slightly
 static glm::vec3 cameraFront = glm::vec3(0.0f, 0.0f, -1.0f);
 static glm::vec3 cameraUp    = glm::vec3(0.0f, 1.0f, 0.0f);
 
+// --- LIGHTING SYSTEM (THE SUN) ---
+// Position: High up in the sky. You can move this in the loop to simulate day/night.
+static glm::vec3 sunPosition = glm::vec3(0.0f, 500.0f, 100.0f);
+
+// Color/Intensity: High values for a bright sun.
+// Updated code: Balanced brightness
+static glm::vec3 sunColor = glm::vec3(1.0f, 0.9f, 0.8f);
+
 // Mouse State
 static bool firstMouse = true;
 static float yaw   = -90.0f;	// Yaw is initialized to -90.0 degrees since a yaw of 0.0 results in a direction vector pointing to the right
@@ -149,7 +157,7 @@ int main(void)
     snow.initialize();
 
     Tree tree;
-    tree.initialize(1000, 1000.0f);
+    tree.initialize(500, 1000.0f);
 
     glm::mat4 viewMatrix, projectionMatrix;
     glm::float32 FoV = 45;
@@ -181,12 +189,50 @@ int main(void)
         skybox.render(skyboxViewMatrix, projectionMatrix);
         glCullFace(GL_BACK);
 
-        // Render Ground
-        ground.render(viewMatrix, projectionMatrix, cameraPos);
+        // --- DAY / NIGHT CYCLE LOGIC ---
+
+        // 1. Calculate Time (Speed factor: 0.5f makes it go faster)
+        float cycleSpeed = 0.02f;
+        float time = (float)glfwGetTime() * cycleSpeed;
+        float radius = 500.0f;
+
+        // 2. Move the Sun (Orbit around the Z-axis)
+        // Cosine for Y makes it go Up and Down. Sine for X makes it go Left/Right.
+        sunPosition.x = sin(time) * radius;
+        sunPosition.y = cos(time) * radius;
+        sunPosition.z = 450.0f; // Keep a slight offset so it's not directly overhead
+
+        // 3. Change Sun Color based on Height (Y)
+        if (sunPosition.y > 0.0f) {
+            // --- DAYTIME / SUNSET ---
+            // Calculate how high the sun is (0.0 = Horizon, 1.0 = High Noon)
+            float heightFactor = glm::clamp(sunPosition.y / radius, 0.0f, 1.0f);
+
+            // Color 1: Bright Noon (White/Yellow)
+            glm::vec3 noonColor = glm::vec3(1.0f, 0.9f, 0.8f);
+            // Color 2: Sunset (Orange/Red)
+            glm::vec3 sunsetColor = glm::vec3(1.0f, 0.4f, 0.0f);
+
+            // Mix the colors based on height
+            // When high up, it uses noonColor. When low, it mixes to sunsetColor.
+            sunColor = glm::mix(sunsetColor, noonColor, heightFactor) * 1.5f;
+        }
+        else {
+            // --- NIGHTTIME ---
+            // The sun is below the horizon (y < 0)
+            // Switch to a dim blue color to simulate moonlight
+            sunColor = glm::vec3(0.05f, 0.05f, 0.15f);
+        }
+
+        // --- RENDER WITH LIGHTING ---
+        // You must update the .render() methods in your Ground, Snow, and Tree classes
+        // to accept the sunPosition and sunColor arguments.
+
+        ground.render(viewMatrix, projectionMatrix, cameraPos, sunPosition, sunColor);
 
         snow.render(viewMatrix, projectionMatrix, deltaTime, cameraPos);
 
-        tree.render(viewMatrix, projectionMatrix, cameraPos);
+        tree.render(viewMatrix, projectionMatrix, cameraPos, sunPosition, sunColor);
 
         // FPS tracking
         // Count number of frames over a few seconds and take average
