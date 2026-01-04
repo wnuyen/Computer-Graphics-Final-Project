@@ -17,6 +17,7 @@ target_include_directories(main PRIVATE
 		"${PROJECT_SOURCE_DIR}/lab2"  # <-- ADD THIS LINE for render/shader.h
 		"${PROJECT_SOURCE_DIR}/external/glfw-3.1.2/include"
 		"${PROJECT_SOURCE_DIR}/external/glm-0.9.7.1"
+		"${PROJECT_SOURCE_DIR}/external/tinygltf-2.9.3/"
 		"${PROJECT_SOURCE_DIR}/external"  # For stb_image.h
 )
 # Link the compiled libraries to the executable

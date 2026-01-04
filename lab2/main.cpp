@@ -3,10 +3,13 @@
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp> // Added for value_ptr
 
-// Define STB_IMAGE_IMPLEMENTATION only once in the project
+// --- GLTF Loading Setup ---
+// Define these before including tiny_gltf.h
+#define TINYGLTF_IMPLEMENTATION
 #define STB_IMAGE_IMPLEMENTATION
-#include <stb/stb_image.h>
+#define STB_IMAGE_WRITE_IMPLEMENTATION
 
 #include <render/shader.h>
 
@@ -15,9 +18,13 @@
 #include <sstream>
 #include <iomanip>
 #include <cmath>
+#include <map>
+#include <tinygltf-2.9.3/tiny_gltf.h>
 
-// --- Texture Loading Helpers (Dependencies for Project Headers) ---
+// Macro for offset
+#define BUFFER_OFFSET(i) ((char *)NULL + (i))
 
+// --- Texture Loading Helpers ---
 static GLuint LoadTextureTileBox(const char *texture_file_path) {
     int w, h, channels;
     uint8_t* img = stbi_load(texture_file_path, &w, &h, &channels, 3);
@@ -72,6 +79,7 @@ static GLuint LoadSkyboxTexture(const char *texture_file_path) {
 #include <../lab2/Ground/ground.h>
 #include <../lab2/Snow/snow.h>
 #include <../lab2/Tree/tree.h>
+#include <../lab2/Person/person.h>
 #include <../lab2/Building/building.h>
 
 // --- Constants ---
@@ -165,6 +173,10 @@ int main(void)
     Tree tree;
     tree.initialize(500, 1000.0f);
 
+    // --- Initialize BOT ---
+    MyBot bot;
+    bot.initialize();
+
     // 6. Initialize Shadows & Shaders
     initShadowMap();
     depthShaderID = LoadShadersFromFile("../lab2/Shadow/depth.vert", "../lab2/Shadow/depth.frag");
@@ -176,6 +188,9 @@ int main(void)
     int frames = 0;
     float fTime = 0.0f;
 
+    // Bot Animation Time
+    float animationTime = 0.0f;
+
     // --- Main Render Loop ---
     while (!glfwWindowShouldClose(window))
     {
@@ -183,6 +198,10 @@ int main(void)
         float currentFrame = (float)glfwGetTime();
         deltaTime = currentFrame - lastFrame;
         lastFrame = currentFrame;
+
+        // Bot Update
+        animationTime += deltaTime * 2.0f; // 2.0x speed
+        bot.update(animationTime);
 
         // B. Input & Updates
         processInput(window);
@@ -206,6 +225,10 @@ int main(void)
 
         ground.renderShadow(depthShaderID, lightSpaceMatrix);
         tree.renderShadow(depthShaderID, lightSpaceMatrix, cameraPos);
+
+        // Note: The bot is not rendered in the shadow pass here because
+        // it requires a shader that supports skinning (bone deformation)
+        // to cast accurate shadows. For now, it will only be visible in the scene.
 
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
@@ -231,6 +254,16 @@ int main(void)
         // Render Snow
         snow.render(viewMatrix, projectionMatrix, deltaTime, cameraPos);
 
+        // --- Render BOT ---
+        // Scale down and position the bot
+        glm::mat4 botModel = glm::mat4(1.0f);
+        botModel = glm::translate(botModel, glm::vec3(0.0f, 0.0f, 20.0f)); // Position 20 units forward
+        botModel = glm::scale(botModel, glm::vec3(0.25f)); // Scale it down (adjust as needed)
+
+        // Use sun color/pos for lighting the bot
+        glm::vec3 botLightColor = sunColor * 1.5f;
+        bot.render(viewMatrix, projectionMatrix, botModel, sunPosition, botLightColor);
+
         // E. FPS Tracking
         frames++;
         fTime += deltaTime;
@@ -251,6 +284,7 @@ int main(void)
     ground.cleanup();
     snow.cleanup();
     tree.cleanup();
+    bot.cleanup();
 
     glfwTerminate();
     return 0;
