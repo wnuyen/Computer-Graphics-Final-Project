@@ -9,11 +9,12 @@ struct Tree {
     std::vector<glm::vec3> treePositions;
 
     // --- SETTINGS: CHANGE THESE TO MOVE/RESIZE THE CIRCLE ---
-    // clearingCenter.x = X axis position
-    // clearingCenter.y = Z axis position
     glm::vec2 clearingCenter = glm::vec2(-80.0f, 50.0f);
     float clearingRadius = 170.0f;
     // -------------------------------------------------------
+
+    // Store the range so Render knows when to wrap
+    float worldHalfWidth = 2000.0f;
 
     GLfloat vertex_buffer_data[126] = {
         // Trunk Front
@@ -84,27 +85,23 @@ struct Tree {
     GLuint lightSpaceMatrixID;
     GLuint shadowMapID;
 
-    // Helper function to check distance from our custom center
     bool isInsideClearing(float x, float z) {
         float dx = x - clearingCenter.x;
-        float dz = z - clearingCenter.y; // .y component of vec2 holds the Z coord
+        float dz = z - clearingCenter.y;
         float dist = sqrt(dx * dx + dz * dz);
         return dist < clearingRadius;
     }
 
     void initialize(int numTrees, float range) {
         treePositions.clear();
+        this->worldHalfWidth = range; // Store the range!
 
         for (int i = 0; i < numTrees; i++) {
             float x = ((float)rand() / RAND_MAX) * (range * 2) - range;
             float z = ((float)rand() / RAND_MAX) * (range * 2) - range;
 
-            // Use the helper check
-            if (isInsideClearing(x, z)) {
-                i--;
-                continue;
-            }
-
+            // Optional: You can check clearing here, but it's more important in render
+            // because the trees move/wrap.
             treePositions.push_back(glm::vec3(x, 0.0f, z));
         }
 
@@ -157,21 +154,26 @@ struct Tree {
         glUniform3f(lightPosID, sunPos.x, sunPos.y, sunPos.z);
         glUniform3f(lightColorID, sunColor.x, sunColor.y, sunColor.z);
 
-        float range = 300.0f;
+        // Use the initialized range
+        float range = this->worldHalfWidth;
         float worldSize = range * 2.0f;
 
         for (auto& pos : treePositions) {
             float dx = cameraPos.x - pos.x;
             float dz = cameraPos.z - pos.z;
+
+            // Wrap trees around the camera
             if (dx > range) pos.x += worldSize;
             else if (dx < -range) pos.x -= worldSize;
+
             if (dz > range) pos.z += worldSize;
             else if (dz < -range) pos.z -= worldSize;
 
-            // Check if tree wrapped into the custom circle center
+            // Check clearing AFTER moving the tree to its new wrapped position
             if (isInsideClearing(pos.x, pos.z)) continue;
 
-            if (glm::distance(pos, cameraPos) > 300.0f) continue;
+            // Optimization: Don't draw if too far (fog limit)
+            if (glm::distance(pos, cameraPos) > 2000.0f) continue;
 
             glm::mat4 modelMatrix = glm::translate(glm::mat4(1.0f), pos);
             float randomVal = (sin(pos.x * 0.13f) * cos(pos.z * 0.17f)) * 0.5f + 0.5f;
@@ -203,22 +205,25 @@ struct Tree {
         GLuint lightSpaceLoc = glGetUniformLocation(shaderID, "lightSpaceMatrix");
         glUniformMatrix4fv(lightSpaceLoc, 1, GL_FALSE, &lightSpaceMatrix[0][0]);
 
-        float range = 300.0f;
+        // Use the initialized range
+        float range = this->worldHalfWidth;
         float worldSize = range * 2.0f;
 
         for (auto& pos : treePositions) {
+            // Shadow pass must mirror the render pass wrapping exactly
             glm::vec3 renderPos = pos;
+
             float dx = cameraPos.x - renderPos.x;
             float dz = cameraPos.z - renderPos.z;
+
             if (dx > range) renderPos.x += worldSize;
             else if (dx < -range) renderPos.x -= worldSize;
+
             if (dz > range) renderPos.z += worldSize;
             else if (dz < -range) renderPos.z -= worldSize;
 
-            // Check if tree wrapped into the custom circle center
             if (isInsideClearing(renderPos.x, renderPos.z)) continue;
-
-            if (glm::distance(renderPos, cameraPos) > 300.0f) continue;
+            if (glm::distance(renderPos, cameraPos) > 2000.0f) continue;
 
             glm::mat4 model = glm::translate(glm::mat4(1.0f), renderPos);
             float randomVal = (sin(renderPos.x * 0.13f) * cos(renderPos.z * 0.17f)) * 0.5f + 0.5f;

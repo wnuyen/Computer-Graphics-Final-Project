@@ -170,7 +170,7 @@ int main(void)
     snow.initialize();
 
     Tree tree;
-    tree.initialize(1000, 1000.0f);
+    tree.initialize(3000, 1000.0f);
 
     // --- Initialize BOT ---
     MyBot bot;
@@ -201,7 +201,7 @@ int main(void)
     depthShaderID = LoadShadersFromFile("../lab2/Shadow/depth.vert", "../lab2/Shadow/depth.frag");
 
     // 7. Projection Matrix
-    glm::mat4 projectionMatrix = glm::perspective(glm::radians(45.0f), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 1000.0f);
+    glm::mat4 projectionMatrix = glm::perspective(glm::radians(45.0f), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 3000.0f);
 
     // FPS Counters
     int frames = 0;

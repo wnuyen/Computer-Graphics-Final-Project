@@ -108,7 +108,7 @@ struct Ground {
         float chunkSize = scale.x * 2.0f;
         int gridX = (int)floor(cameraPosition.x / chunkSize);
         int gridZ = (int)floor(cameraPosition.z / chunkSize);
-        int renderRadius = 5;
+        int renderRadius = 30;
 
         for (int x = -renderRadius; x <= renderRadius; x++) {
             for (int z = -renderRadius; z <= renderRadius; z++) {

@@ -62,8 +62,8 @@ void main(){
 
     // --- FOG CALCULATION ---
     float dist = distance(worldPosition, cameraPosition);
-    float fogStart = 500.0;
-    float fogEnd = 950.0;
+    float fogStart = 1500.0;
+    float fogEnd = 3000.0;
     float fogFactor = clamp((fogEnd - dist) / (fogEnd - fogStart), 0.0, 1.0);
 
     vec3 skyColor = vec3(0.2, 0.2, 0.25);
