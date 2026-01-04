@@ -107,6 +107,10 @@ struct Tree {
         glUseProgram(programID);
         glBindVertexArray(vertexArrayID);
 
+        // --- FIX: Disable Culling for Trees ---
+        // This makes the leaves visible from the inside/underneath
+        glDisable(GL_CULL_FACE);
+
         glEnableVertexAttribArray(0);
         glBindBuffer(GL_ARRAY_BUFFER, vertexBufferID);
         glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, 0);
@@ -116,39 +120,28 @@ struct Tree {
         glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, 0);
 
         // --- INFINITE FOREST LOGIC ---
-        // This matches the range we will set in main (300 range = 600x600 box)
         float range = 300.0f;
         float worldSize = range * 2.0f;
 
-        // Note: removed 'const' so we can update positions
         for (auto& pos : treePositions) {
 
-            // 1. Wrap Logic: If a tree is too far away, wrap it to the other side
-            // This keeps the trees always centered around the camera
+            // 1. Wrap Logic
             float dx = cameraPos.x - pos.x;
             float dz = cameraPos.z - pos.z;
 
-            // Wrap X axis
             if (dx > range) pos.x += worldSize;
             else if (dx < -range) pos.x -= worldSize;
 
-            // Wrap Z axis
             if (dz > range) pos.z += worldSize;
             else if (dz < -range) pos.z -= worldSize;
 
-            // 2. Culling: Only draw if reasonably close (fog distance)
-            // We use a slightly smaller distance than the range to hide the "pop-in"
+            // 2. Culling distance
             if (glm::distance(pos, cameraPos) > 300.0f) continue;
 
             glm::mat4 modelMatrix = glm::translate(glm::mat4(1.0f), pos);
 
             // --- UPDATED SCALE LOGIC ---
-            // 1. Use sin/cos of position to create a pseudo-random number between 0.0 and 1.0
-            // We use a prime number multiplier (0.13f) to avoid repeating patterns on the grid
             float randomVal = (sin(pos.x * 0.13f) * cos(pos.z * 0.17f)) * 0.5f + 0.5f;
-
-            // 2. Base scale is 2.0x, plus up to 4.0x extra based on randomness
-            // Result: Trees range from 2.0x to 6.0x their original size
             float s = 2.0f + (randomVal * 4.0f);
 
             modelMatrix = glm::scale(modelMatrix, glm::vec3(s, s * 1.2f, s));
@@ -163,6 +156,10 @@ struct Tree {
         glDisableVertexAttribArray(0);
         glDisableVertexAttribArray(1);
         glBindVertexArray(0);
+
+        // --- FIX: Re-enable Culling ---
+        // Restore standard rendering state for other objects (like the ground)
+        glEnable(GL_CULL_FACE);
     }
 
     void cleanup() {
