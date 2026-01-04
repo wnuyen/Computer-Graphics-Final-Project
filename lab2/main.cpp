@@ -272,7 +272,7 @@ int main(void)
         glCullFace(GL_BACK);
 
         // Render Snow
-        snow.render(viewMatrix, projectionMatrix, deltaTime, cameraPos);
+        snow.render(viewMatrix, projectionMatrix, deltaTime, cameraPos, sunPosition, sunColor, lightSpaceMatrix, depthMap);
 
         // --- Render BOTS (Crowd) ---
         glm::vec3 botLightColor = sunColor * 1.5f;
