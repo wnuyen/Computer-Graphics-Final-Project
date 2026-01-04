@@ -8,6 +8,9 @@ struct MyBot {
 
     tinygltf::Model model;
 
+   std::vector<GLuint> textureIDs;
+   GLuint textureSamplerID; // Handle for the texture uniform
+
     struct PrimitiveObject {
        GLuint vao;
        std::map<int, GLuint> vbos;
@@ -35,6 +38,35 @@ struct MyBot {
        std::vector<SamplerObject> samplers;
     };
     std::vector<AnimationObject> animationObjects;
+
+   void loadTextures(tinygltf::Model &model) {
+      textureIDs.resize(model.textures.size());
+
+      for (size_t i = 0; i < model.textures.size(); i++) {
+         tinygltf::Texture &tex = model.textures[i];
+         if (tex.source > -1) {
+            GLuint texID;
+            glGenTextures(1, &texID);
+
+            tinygltf::Image &image = model.images[tex.source];
+
+            glBindTexture(GL_TEXTURE_2D, texID);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+            GLenum format = GL_RGBA;
+            if (image.component == 3) format = GL_RGB;
+
+            glTexImage2D(GL_TEXTURE_2D, 0, format, image.width, image.height,
+                         0, format, GL_UNSIGNED_BYTE, &image.image.at(0));
+            glGenerateMipmap(GL_TEXTURE_2D);
+
+            textureIDs[i] = texID;
+         }
+      }
+   }
 
     glm::mat4 getNodeTransform(const tinygltf::Node& node) {
        glm::mat4 transform(1.0f);
@@ -239,24 +271,31 @@ struct MyBot {
        return res;
     }
 
-    void initialize() {
-       // Ensure this path is correct for your project structure!
-       if (!loadModel(model, "../lab2/Person/bot.gltf")) {
-           std::cerr << "Failed to load bot.gltf! Check path." << std::endl;
-          return;
-       }
-       primitiveObjects = bindModel(model);
-       skinObjects = prepareSkinning(model);
-       animationObjects = prepareAnimation(model);
+   void initialize() {
+      if (!loadModel(model, "../lab2/Person/bot.gltf")) {
+         std::cerr << "Failed to load bot.gltf! Check path." << std::endl;
+         return;
+      }
 
-       // Ensure these shaders exist!
-       programID = LoadShadersFromFile("../lab2/Person/bot.vert", "../lab2/Person/bot.frag");
+      // --- ADD THIS LINE ---
+      loadTextures(model);
+      // --------------------
 
-       mvpMatrixID = glGetUniformLocation(programID, "MVP");
-       lightPositionID = glGetUniformLocation(programID, "lightPosition");
-       lightIntensityID = glGetUniformLocation(programID, "lightIntensity");
-       jointMatricesID = glGetUniformLocation(programID, "jointMatrices");
-    }
+      primitiveObjects = bindModel(model);
+      skinObjects = prepareSkinning(model);
+      animationObjects = prepareAnimation(model);
+
+      programID = LoadShadersFromFile("../lab2/Person/bot.vert", "../lab2/Person/bot.frag");
+
+      mvpMatrixID = glGetUniformLocation(programID, "MVP");
+      lightPositionID = glGetUniformLocation(programID, "lightPosition");
+      lightIntensityID = glGetUniformLocation(programID, "lightIntensity");
+      jointMatricesID = glGetUniformLocation(programID, "jointMatrices");
+
+      // --- ADD THIS LINE ---
+      textureSamplerID = glGetUniformLocation(programID, "diffuseTexture");
+      // --------------------
+   }
 
     void bindMesh(std::vector<PrimitiveObject> &primitiveObjects, tinygltf::Model &model, tinygltf::Mesh &mesh) {
        std::map<int, GLuint> vbos;
@@ -312,18 +351,33 @@ struct MyBot {
        return primitiveObjects;
     }
 
-    void drawMesh(const std::vector<PrimitiveObject> &primitiveObjects, tinygltf::Model &model, tinygltf::Mesh &mesh) {
-       for (size_t i = 0; i < mesh.primitives.size(); ++i) {
-          GLuint vao = primitiveObjects[i].vao;
-          std::map<int, GLuint> vbos = primitiveObjects[i].vbos;
-          glBindVertexArray(vao);
-          tinygltf::Primitive primitive = mesh.primitives[i];
-          tinygltf::Accessor indexAccessor = model.accessors[primitive.indices];
-          glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, vbos.at(indexAccessor.bufferView));
-          glDrawElements(primitive.mode, indexAccessor.count, indexAccessor.componentType, BUFFER_OFFSET(indexAccessor.byteOffset));
-          glBindVertexArray(0);
-       }
-    }
+   void drawMesh(const std::vector<PrimitiveObject> &primitiveObjects, tinygltf::Model &model, tinygltf::Mesh &mesh) {
+      for (size_t i = 0; i < mesh.primitives.size(); ++i) {
+         GLuint vao = primitiveObjects[i].vao;
+         std::map<int, GLuint> vbos = primitiveObjects[i].vbos;
+         glBindVertexArray(vao);
+
+         tinygltf::Primitive primitive = mesh.primitives[i];
+         tinygltf::Accessor indexAccessor = model.accessors[primitive.indices];
+
+         // --- TEXTURE BINDING LOGIC ---
+         if (primitive.material >= 0) {
+            tinygltf::Material &mat = model.materials[primitive.material];
+            // Look for baseColorTexture in PBR metallic roughness
+            int texIndex = mat.pbrMetallicRoughness.baseColorTexture.index;
+            if (texIndex >= 0 && texIndex < textureIDs.size()) {
+               glActiveTexture(GL_TEXTURE0);
+               glBindTexture(GL_TEXTURE_2D, textureIDs[texIndex]);
+               glUniform1i(textureSamplerID, 0); // Tell shader to use texture unit 0
+            }
+         }
+         // -----------------------------
+
+         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, vbos.at(indexAccessor.bufferView));
+         glDrawElements(primitive.mode, indexAccessor.count, indexAccessor.componentType, BUFFER_OFFSET(indexAccessor.byteOffset));
+         glBindVertexArray(0);
+      }
+   }
 
     void drawModelNodes(const std::vector<PrimitiveObject>& primitiveObjects, tinygltf::Model &model, tinygltf::Node &node) {
        if ((node.mesh >= 0) && (node.mesh < model.meshes.size())) drawMesh(primitiveObjects, model, model.meshes[node.mesh]);

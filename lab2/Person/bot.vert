@@ -1,34 +1,56 @@
 #version 330 core
 
-// Input attributes matches person.h bindMesh order
-layout(location = 0) in vec3 vertexPosition;
-layout(location = 1) in vec3 vertexNormal;
-layout(location = 2) in vec2 vertexUV;
-layout(location = 3) in vec4 vertexJoints;  // Bone indices
-layout(location = 4) in vec4 vertexWeights; // Bone weights
+// --- INPUTS ---
+// These locations must match the "vaa" logic in person.h
+layout(location = 0) in vec3 position;
+layout(location = 1) in vec3 normal;
+layout(location = 2) in vec2 texCoord;      // <--- Added (Required for texture)
+layout(location = 3) in vec4 jointIndices;  // Changed to vec4 for compatibility
+layout(location = 4) in vec4 jointWeights;
 
-// Uniforms passed from person.h -> render()
+// --- OUTPUTS ---
+// These go to the Fragment Shader
+out vec3 vPosition;
+out vec3 vNormal;
+out vec2 vTexCoord;                         // <--- Added
+
+// --- UNIFORMS ---
 uniform mat4 MVP;
-uniform mat4 jointMatrices[25]; // Array size matches joints in bot.gltf (25 joints)
-
-// Output to fragment shader
-out vec3 fragmentNormal;
+uniform mat4 jointMatrices[50]; // 50 joints max
 
 void main() {
-    // 1. Calculate Skinning Matrix
-    // The model is animated, so we combine the transforms of the 4 influencing bones
-    // based on their weights.
-    mat4 skinMatrix =
-    vertexWeights.x * jointMatrices[int(vertexJoints.x)] +
-    vertexWeights.y * jointMatrices[int(vertexJoints.y)] +
-    vertexWeights.z * jointMatrices[int(vertexJoints.z)] +
-    vertexWeights.w * jointMatrices[int(vertexJoints.w)];
+    // 1. Skinning Initialization
+    // We start with zero and accumulate the influence of each bone
+    vec4 totalLocalPos = vec4(0.0);
+    vec4 totalNormal   = vec4(0.0);
 
-    // 2. Calculate final vertex position
-    // MVP * SkinMatrix * LocalPosition
-    gl_Position = MVP * skinMatrix * vec4(vertexPosition, 1.0);
+    // 2. Iterate through the 4 joints that influence this vertex
+    for(int i = 0; i < 4; i++){
+        // Convert the joint index to an integer
+        int jointIndex = int(jointIndices[i]);
+        float weight   = jointWeights[i];
 
-    // 3. Transform the normal using the skin matrix (for lighting)
-    // We only take the rotation part of the matrix (mat3)
-    fragmentNormal = mat3(skinMatrix) * vertexNormal;
+        // Skip if the joint index is invalid (some models use -1)
+        if(jointIndex >= 0) {
+            // Get the transform matrix for this specific joint
+            mat4 jointTransform = jointMatrices[jointIndex];
+
+            // Accumulate Position: (Matrix * Position) * Weight
+            vec4 posePosition = jointTransform * vec4(position, 1.0);
+            totalLocalPos += posePosition * weight;
+
+            // Accumulate Normal: (Matrix * Normal) * Weight
+            // Note: We use 0.0 for w because normals are directions, not positions
+            vec4 poseNormal = jointTransform * vec4(normal, 0.0);
+            totalNormal += poseNormal * weight;
+        }
+    }
+
+    // 3. Final Position Calculation
+    gl_Position = MVP * totalLocalPos;
+
+    // 4. Pass Data to Fragment Shader
+    vPosition = totalLocalPos.xyz;      // World position for lighting
+    vNormal   = normalize(totalNormal.xyz); // Normal for lighting
+    vTexCoord = texCoord;               // UV coordinates for texturing
 }

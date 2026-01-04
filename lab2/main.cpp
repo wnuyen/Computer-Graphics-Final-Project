@@ -171,11 +171,31 @@ int main(void)
     snow.initialize();
 
     Tree tree;
-    tree.initialize(500, 1000.0f);
+    tree.initialize(100, 1000.0f);
 
     // --- Initialize BOT ---
     MyBot bot;
     bot.initialize();
+
+    // Define positions for multiple people
+    std::vector<glm::vec3> botPositions;
+
+    // 1. The original guy
+    botPositions.push_back(glm::vec3(0.0f, 0.0f, 20.0f));
+
+    // 2. Add specific locations
+    botPositions.push_back(glm::vec3(20.0f, 0.0f, 20.0f)); // To the right
+    botPositions.push_back(glm::vec3(-20.0f, 0.0f, 20.0f)); // To the left
+    botPositions.push_back(glm::vec3(10.0f, 0.0f, 40.0f)); // Further back
+
+    // 3. (Optional) Generate a random crowd
+    for(int i = 0; i < 10; i++) {
+        // Random X between -100 and 100
+        float rX = (float)(rand() % 200 - 100);
+        // Random Z between 0 and 100
+        float rZ = (float)(rand() % 100);
+        botPositions.push_back(glm::vec3(rX, 0.0f, rZ));
+    }
 
     // 6. Initialize Shadows & Shaders
     initShadowMap();
@@ -254,15 +274,21 @@ int main(void)
         // Render Snow
         snow.render(viewMatrix, projectionMatrix, deltaTime, cameraPos);
 
-        // --- Render BOT ---
-        // Scale down and position the bot
-        glm::mat4 botModel = glm::mat4(1.0f);
-        botModel = glm::translate(botModel, glm::vec3(0.0f, 0.0f, 20.0f)); // Position 20 units forward
-        botModel = glm::scale(botModel, glm::vec3(0.25f)); // Scale it down (adjust as needed)
-
-        // Use sun color/pos for lighting the bot
+        // --- Render BOTS (Crowd) ---
         glm::vec3 botLightColor = sunColor * 1.5f;
-        bot.render(viewMatrix, projectionMatrix, botModel, sunPosition, botLightColor);
+
+        for (const auto& pos : botPositions) {
+            glm::mat4 botModel = glm::mat4(1.0f);
+
+            // 1. Move to the specific position from our list
+            botModel = glm::translate(botModel, pos);
+
+            // 2. Scale it down
+            botModel = glm::scale(botModel, glm::vec3(0.25f));
+
+            // 3. Render
+            bot.render(viewMatrix, projectionMatrix, botModel, sunPosition, botLightColor);
+        }
 
         // E. FPS Tracking
         frames++;
