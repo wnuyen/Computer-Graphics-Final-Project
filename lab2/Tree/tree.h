@@ -8,6 +8,13 @@
 struct Tree {
     std::vector<glm::vec3> treePositions;
 
+    // --- SETTINGS: CHANGE THESE TO MOVE/RESIZE THE CIRCLE ---
+    // clearingCenter.x = X axis position
+    // clearingCenter.y = Z axis position
+    glm::vec2 clearingCenter = glm::vec2(-80.0f, 50.0f);
+    float clearingRadius = 170.0f;
+    // -------------------------------------------------------
+
     GLfloat vertex_buffer_data[126] = {
         // Trunk Front
         -0.5f, 0.0f, 0.5f, 0.5f, 0.0f, 0.5f, 0.5f, 5.0f, 0.5f,
@@ -74,16 +81,30 @@ struct Tree {
     GLuint vertexBufferID, colorBufferID, normalBufferID;
     GLuint programID;
     GLuint mvpMatrixID, modelMatrixID, lightPosID, lightColorID;
-
-    // --- NEW: Shadow Uniforms ---
     GLuint lightSpaceMatrixID;
     GLuint shadowMapID;
 
+    // Helper function to check distance from our custom center
+    bool isInsideClearing(float x, float z) {
+        float dx = x - clearingCenter.x;
+        float dz = z - clearingCenter.y; // .y component of vec2 holds the Z coord
+        float dist = sqrt(dx * dx + dz * dz);
+        return dist < clearingRadius;
+    }
+
     void initialize(int numTrees, float range) {
+        treePositions.clear();
+
         for (int i = 0; i < numTrees; i++) {
             float x = ((float)rand() / RAND_MAX) * (range * 2) - range;
             float z = ((float)rand() / RAND_MAX) * (range * 2) - range;
-            if (abs(x) < 5.0f && abs(z) < 5.0f) continue;
+
+            // Use the helper check
+            if (isInsideClearing(x, z)) {
+                i--;
+                continue;
+            }
+
             treePositions.push_back(glm::vec3(x, 0.0f, z));
         }
 
@@ -108,13 +129,10 @@ struct Tree {
         modelMatrixID = glGetUniformLocation(programID, "M");
         lightPosID = glGetUniformLocation(programID, "lightPos");
         lightColorID = glGetUniformLocation(programID, "lightColor");
-
-        // --- NEW: Get Shadow Uniform Locations ---
         lightSpaceMatrixID = glGetUniformLocation(programID, "lightSpaceMatrix");
         shadowMapID = glGetUniformLocation(programID, "shadowMap");
     }
 
-    // --- UPDATED RENDER SIGNATURE to accept Shadow Data ---
     void render(const glm::mat4& viewMatrix, const glm::mat4& projectionMatrix, glm::vec3 cameraPos, glm::vec3 sunPos, glm::vec3 sunColor, glm::mat4 lightSpaceMatrix, GLuint depthMapTexture) {
         glUseProgram(programID);
         glBindVertexArray(vertexArrayID);
@@ -132,14 +150,10 @@ struct Tree {
         glBindBuffer(GL_ARRAY_BUFFER, normalBufferID);
         glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 0, 0);
 
-        // --- NEW: Bind Shadow Map to Unit 1 ---
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_2D, depthMapTexture);
         glUniform1i(shadowMapID, 1);
-
-        // --- NEW: Send Light Space Matrix ---
         glUniformMatrix4fv(lightSpaceMatrixID, 1, GL_FALSE, &lightSpaceMatrix[0][0]);
-
         glUniform3f(lightPosID, sunPos.x, sunPos.y, sunPos.z);
         glUniform3f(lightColorID, sunColor.x, sunColor.y, sunColor.z);
 
@@ -153,6 +167,9 @@ struct Tree {
             else if (dx < -range) pos.x -= worldSize;
             if (dz > range) pos.z += worldSize;
             else if (dz < -range) pos.z -= worldSize;
+
+            // Check if tree wrapped into the custom circle center
+            if (isInsideClearing(pos.x, pos.z)) continue;
 
             if (glm::distance(pos, cameraPos) > 300.0f) continue;
 
@@ -197,6 +214,9 @@ struct Tree {
             else if (dx < -range) renderPos.x -= worldSize;
             if (dz > range) renderPos.z += worldSize;
             else if (dz < -range) renderPos.z -= worldSize;
+
+            // Check if tree wrapped into the custom circle center
+            if (isInsideClearing(renderPos.x, renderPos.z)) continue;
 
             if (glm::distance(renderPos, cameraPos) > 300.0f) continue;
 

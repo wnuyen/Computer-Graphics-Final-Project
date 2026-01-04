@@ -80,7 +80,6 @@ static GLuint LoadSkyboxTexture(const char *texture_file_path) {
 #include <../lab2/Snow/snow.h>
 #include <../lab2/Tree/tree.h>
 #include <../lab2/Person/person.h>
-#include <../lab2/Building/building.h>
 
 // --- Constants ---
 const unsigned int SCR_WIDTH = 1024;
@@ -171,7 +170,7 @@ int main(void)
     snow.initialize();
 
     Tree tree;
-    tree.initialize(100, 1000.0f);
+    tree.initialize(1000, 1000.0f);
 
     // --- Initialize BOT ---
     MyBot bot;
@@ -380,7 +379,7 @@ void processInput(GLFWwindow *window)
     if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS)
         cameraPos += glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed;
 
-    cameraPos.y = glm::clamp(cameraPos.y, 2.0f, 100.0f);
+    cameraPos.y = glm::clamp(cameraPos.y, 2.0f, 300.0f);
 }
 
 // --------------------------------------------------------------------------------
