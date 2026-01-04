@@ -1,57 +1,22 @@
 #include <glad/gl.h>
 #include <GLFW/glfw3.h>
+
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
-#include <render/shader.h>
-
+// Define STB_IMAGE_IMPLEMENTATION only once in the project
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb/stb_image.h>
 
+#include <render/shader.h>
+
 #include <vector>
 #include <iostream>
-#define _USE_MATH_DEFINES
-#include <math.h>
 #include <sstream>
 #include <iomanip>
+#include <cmath>
 
-static GLFWwindow *window;
-static void key_callback(GLFWwindow *window, int key, int scancode, int action, int mode);
-static void mouse_callback(GLFWwindow* window, double xpos, double ypos);
-static void processInput(GLFWwindow *window);
-
-// --- Camera System Variables ---
-// Camera Position & Direction
-static glm::vec3 cameraPos   = glm::vec3(0.0f, 10.0f, 150.0f); // Start slightly up and back
-static glm::vec3 cameraFront = glm::vec3(0.0f, 0.0f, -1.0f);
-static glm::vec3 cameraUp    = glm::vec3(0.0f, 1.0f, 0.0f);
-
-// --- LIGHTING SYSTEM (THE SUN) ---
-// Position: High up in the sky. You can move this in the loop to simulate day/night.
-static glm::vec3 sunPosition = glm::vec3(0.0f, 500.0f, 100.0f);
-
-// Color/Intensity: High values for a bright sun.
-// Updated code: Balanced brightness
-static glm::vec3 sunColor = glm::vec3(1.0f, 0.9f, 0.8f);
-
-// Mouse State
-static bool firstMouse = true;
-static float yaw   = -90.0f;	// Yaw is initialized to -90.0 degrees since a yaw of 0.0 results in a direction vector pointing to the right
-static float pitch =  0.0f;
-static float lastX =  1024.0f / 2.0;
-static float lastY =  768.0f / 2.0;
-
-// Timing (for smooth movement)
-static float deltaTime = 0.0f;	// Time between current frame and last frame
-static float lastFrame = 0.0f;
-
-// Shadow Map resolution (High res for sharper shadows)
-const unsigned int SHADOW_WIDTH = 2048, SHADOW_HEIGHT = 2048;
-GLuint depthMapFBO;
-GLuint depthMap;
-GLuint depthShaderID; // For the simple depth render
-
-// -------------------------------
+// --- Texture Loading Helpers (Dependencies for Project Headers) ---
 
 static GLuint LoadTextureTileBox(const char *texture_file_path) {
     int w, h, channels;
@@ -102,17 +67,56 @@ static GLuint LoadSkyboxTexture(const char *texture_file_path) {
     return textureID;
 }
 
+// --- Project Includes ---
 #include <../lab2/Skybox/skybox.h>
 #include <../lab2/Ground/ground.h>
 #include <../lab2/Snow/snow.h>
 #include <../lab2/Tree/tree.h>
 #include <../lab2/Building/building.h>
 
+// --- Constants ---
+const unsigned int SCR_WIDTH = 1024;
+const unsigned int SCR_HEIGHT = 768;
+const unsigned int SHADOW_WIDTH = 2048;
+const unsigned int SHADOW_HEIGHT = 2048;
+
+// --- Global Variables ---
+static GLFWwindow *window;
+
+// Camera
+static glm::vec3 cameraPos   = glm::vec3(0.0f, 10.0f, 150.0f);
+static glm::vec3 cameraFront = glm::vec3(0.0f, 0.0f, -1.0f);
+static glm::vec3 cameraUp    = glm::vec3(0.0f, 1.0f, 0.0f);
+static float yaw   = -90.0f;
+static float pitch =  0.0f;
+static float lastX =  SCR_WIDTH / 2.0f;
+static float lastY =  SCR_HEIGHT / 2.0f;
+static bool firstMouse = true;
+
+// Timing
+static float deltaTime = 0.0f;
+static float lastFrame = 0.0f;
+
+// Lighting (Sun)
+static glm::vec3 sunPosition = glm::vec3(0.0f, 500.0f, 100.0f);
+static glm::vec3 sunColor    = glm::vec3(1.0f, 0.9f, 0.8f);
+
+// Shadow Mapping
+GLuint depthMapFBO;
+GLuint depthMap;
+GLuint depthShaderID;
+
+// --- Function Prototypes ---
+static void key_callback(GLFWwindow *window, int key, int scancode, int action, int mode);
+static void mouse_callback(GLFWwindow* window, double xpos, double ypos);
+static void processInput(GLFWwindow *window);
+static void initShadowMap();
+static void updateSun(float timeValue);
 
 int main(void)
 {
-    if (!glfwInit())
-    {
+    // 1. Initialize GLFW
+    if (!glfwInit()) {
         std::cerr << "Failed to initialize GLFW." << std::endl;
         return -1;
     }
@@ -122,37 +126,33 @@ int main(void)
     glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-    window = glfwCreateWindow(1024, 768, "Final Project", NULL, NULL);
-    if (window == NULL)
-    {
+    window = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, "Final Project", NULL, NULL);
+    if (window == NULL) {
         std::cerr << "Failed to open a GLFW window." << std::endl;
         glfwTerminate();
         return -1;
     }
     glfwMakeContextCurrent(window);
 
-    // --- INPUT SETUP ---
+    // 2. Setup Input & Callbacks
     glfwSetInputMode(window, GLFW_STICKY_KEYS, GL_TRUE);
-    // Hide cursor and capture it (FPS style)
-    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-
-    // Set callbacks
+    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED); // Capture cursor
     glfwSetKeyCallback(window, key_callback);
     glfwSetCursorPosCallback(window, mouse_callback);
-    // -------------------
 
+    // 3. Initialize GLAD
     int version = gladLoadGL(glfwGetProcAddress);
-    if (version == 0)
-    {
+    if (version == 0) {
         std::cerr << "Failed to initialize OpenGL context." << std::endl;
         return -1;
     }
 
+    // 4. Global OpenGL State
     glClearColor(0.2f, 0.2f, 0.25f, 0.0f);
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_CULL_FACE);
 
-
+    // 5. Initialize Scene Objects
     Skybox skybox;
     skybox.initialize();
 
@@ -165,24 +165,111 @@ int main(void)
     Tree tree;
     tree.initialize(500, 1000.0f);
 
-    glm::mat4 viewMatrix, projectionMatrix;
-    glm::float32 FoV = 45;
-    glm::float32 zNear = 0.1f;
-    glm::float32 zFar = 1000.0f;
-    projectionMatrix = glm::perspective(glm::radians(FoV), 4.0f / 3.0f, zNear, zFar);
+    // 6. Initialize Shadows & Shaders
+    initShadowMap();
+    depthShaderID = LoadShadersFromFile("../lab2/Shadow/depth.vert", "../lab2/Shadow/depth.frag");
 
+    // 7. Projection Matrix
+    glm::mat4 projectionMatrix = glm::perspective(glm::radians(45.0f), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 1000.0f);
+
+    // FPS Counters
     int frames = 0;
     float fTime = 0.0f;
 
-    // --- SHADOW MAP INIT ---
+    // --- Main Render Loop ---
+    while (!glfwWindowShouldClose(window))
+    {
+        // A. Time Logic
+        float currentFrame = (float)glfwGetTime();
+        deltaTime = currentFrame - lastFrame;
+        lastFrame = currentFrame;
+
+        // B. Input & Updates
+        processInput(window);
+        updateSun(currentFrame);
+
+        // C. STEP 1: SHADOW PASS
+        // ------------------------------------------------
+        float near_plane = 1.0f, far_plane = 1000.0f;
+        float orthoSize = 150.0f;
+
+        glm::vec3 lightPos = cameraPos + glm::normalize(sunPosition) * 300.0f;
+
+        glm::mat4 lightProjection = glm::ortho(-orthoSize, orthoSize, -orthoSize, orthoSize, near_plane, far_plane);
+        glm::mat4 lightView = glm::lookAt(lightPos, cameraPos, glm::vec3(0.0, 1.0, 0.0));
+        glm::mat4 lightSpaceMatrix = lightProjection * lightView;
+
+        glViewport(0, 0, SHADOW_WIDTH, SHADOW_HEIGHT);
+        glBindFramebuffer(GL_FRAMEBUFFER, depthMapFBO);
+        glClear(GL_DEPTH_BUFFER_BIT);
+        glUseProgram(depthShaderID);
+
+        ground.renderShadow(depthShaderID, lightSpaceMatrix);
+        tree.renderShadow(depthShaderID, lightSpaceMatrix, cameraPos);
+
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+        // D. STEP 2: SCENE RENDER PASS
+        // ------------------------------------------------
+        int w, h;
+        glfwGetFramebufferSize(window, &w, &h);
+        glViewport(0, 0, w, h);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+        glm::mat4 viewMatrix = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
+
+        // Render Objects
+        ground.render(viewMatrix, projectionMatrix, cameraPos, sunPosition, sunColor, lightSpaceMatrix, depthMap);
+        tree.render(viewMatrix, projectionMatrix, cameraPos, sunPosition, sunColor, lightSpaceMatrix, depthMap);
+
+        // Render Skybox
+        glm::mat4 skyboxView = glm::mat4(glm::mat3(viewMatrix));
+        glCullFace(GL_FRONT);
+        skybox.render(skyboxView, projectionMatrix);
+        glCullFace(GL_BACK);
+
+        // Render Snow
+        snow.render(viewMatrix, projectionMatrix, deltaTime, cameraPos);
+
+        // E. FPS Tracking
+        frames++;
+        fTime += deltaTime;
+        if (fTime > 2.0f) {
+            std::stringstream stream;
+            stream << std::fixed << std::setprecision(2) << "Final Project | FPS: " << (frames / fTime);
+            glfwSetWindowTitle(window, stream.str().c_str());
+            frames = 0;
+            fTime = 0;
+        }
+
+        glfwSwapBuffers(window);
+        glfwPollEvents();
+    }
+
+    // Cleanup
+    skybox.cleanup();
+    ground.cleanup();
+    snow.cleanup();
+    tree.cleanup();
+
+    glfwTerminate();
+    return 0;
+}
+
+// --------------------------------------------------------------------------------
+// Helper: Initialize Shadow Map Framebuffer
+// --------------------------------------------------------------------------------
+static void initShadowMap() {
     glGenFramebuffers(1, &depthMapFBO);
     glGenTextures(1, &depthMap);
     glBindTexture(GL_TEXTURE_2D, depthMap);
+
     glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, SHADOW_WIDTH, SHADOW_HEIGHT, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+
     float borderColor[] = { 1.0, 1.0, 1.0, 1.0 };
     glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor);
 
@@ -191,216 +278,73 @@ int main(void)
     glDrawBuffer(GL_NONE);
     glReadBuffer(GL_NONE);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
-    // Load the new simple depth shader
-    depthShaderID = LoadShadersFromFile("../lab2/Shadow/depth.vert", "../lab2/Shadow/depth.frag");
-
-    do
-    {
-        // Calculate deltaTime
-        float currentFrame = (float)glfwGetTime();
-        deltaTime = currentFrame - lastFrame;
-        lastFrame = currentFrame;
-
-        // Process movement inputs (Arrow Keys)
-        processInput(window);
-
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-        // Update View Matrix (Look from Camera Position, to Position + Front Vector)
-        viewMatrix = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
-
-        glm::mat4 skyboxViewMatrix = glm::mat4(glm::mat3(viewMatrix));
-
-        glCullFace(GL_FRONT);
-        skybox.render(skyboxViewMatrix, projectionMatrix);
-        glCullFace(GL_BACK);
-
-        // --- DAY / NIGHT CYCLE LOGIC ---
-
-        // 1. Calculate Time (Speed factor: 0.5f makes it go faster)
-        float cycleSpeed = 0.02f;
-        float time = (float)glfwGetTime() * cycleSpeed;
-        float radius = 500.0f;
-
-        // 2. Move the Sun (Orbit around the Z-axis)
-        // Cosine for Y makes it go Up and Down. Sine for X makes it go Left/Right.
-        sunPosition.x = sin(time) * radius;
-        sunPosition.y = cos(time) * radius;
-        sunPosition.z = 450.0f; // Keep a slight offset so it's not directly overhead
-
-        // 3. Change Sun Color based on Height (Y)
-        if (sunPosition.y > 0.0f) {
-            // --- DAYTIME / SUNSET ---
-            // Calculate how high the sun is (0.0 = Horizon, 1.0 = High Noon)
-            float heightFactor = glm::clamp(sunPosition.y / radius, 0.0f, 1.0f);
-
-            // Color 1: Bright Noon (White/Yellow)
-            glm::vec3 noonColor = glm::vec3(1.0f, 0.9f, 0.8f);
-            // Color 2: Sunset (Orange/Red)
-            glm::vec3 sunsetColor = glm::vec3(1.0f, 0.4f, 0.0f);
-
-            // Mix the colors based on height
-            // When high up, it uses noonColor. When low, it mixes to sunsetColor.
-            sunColor = glm::mix(sunsetColor, noonColor, heightFactor) * 1.5f;
-        }
-        else {
-            // --- NIGHTTIME ---
-            // The sun is below the horizon (y < 0)
-            // Switch to a dim blue color to simulate moonlight
-            sunColor = glm::vec3(0.05f, 0.05f, 0.15f);
-        }
-
-        // --------------------------------------------------------------
-        // STEP 1: RENDER DEPTH OF SCENE TO TEXTURE (FROM SUN)
-        // --------------------------------------------------------------
-
-        // 1. Configure Light Matrix
-        // Since it's a Sun, we use Orthographic projection (Parallel rays)
-        float near_plane = 1.0f, far_plane = 1000.0f;
-        float orthoSize = 150.0f; // Covers 150 units around the player
-        glm::mat4 lightProjection = glm::ortho(-orthoSize, orthoSize, -orthoSize, orthoSize, near_plane, far_plane);
-
-        // The Sun "Camera" looks at the player's position, from the sun direction
-        glm::vec3 lightPos = cameraPos + glm::normalize(sunPosition) * 300.0f;
-        glm::mat4 lightView = glm::lookAt(lightPos, cameraPos, glm::vec3(0.0, 1.0, 0.0));
-        glm::mat4 lightSpaceMatrix = lightProjection * lightView;
-
-        // 2. Render to Depth FBO
-        glViewport(0, 0, SHADOW_WIDTH, SHADOW_HEIGHT);
-        glBindFramebuffer(GL_FRAMEBUFFER, depthMapFBO);
-        glClear(GL_DEPTH_BUFFER_BIT);
-
-        glUseProgram(depthShaderID);
-        // Render objects using the new renderShadow methods
-        ground.renderShadow(depthShaderID, lightSpaceMatrix);
-        tree.renderShadow(depthShaderID, lightSpaceMatrix, cameraPos);
-
-        glBindFramebuffer(GL_FRAMEBUFFER, 0); // Unbind
-
-        // --------------------------------------------------------------
-        // STEP 2: RENDER SCENE NORMALLY (WITH SHADOW MAP)
-        // --------------------------------------------------------------
-
-        // Reset viewport
-        int w, h;
-        glfwGetFramebufferSize(window, &w, &h);
-        glViewport(0, 0, w, h);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-        viewMatrix = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
-
-        // --- RENDER GROUND ---
-        // You need to update ground.render to accept lightSpaceMatrix and the depthMap texture ID
-        // Inside ground.render, ensure you:
-        // glActiveTexture(GL_TEXTURE1); glBindTexture(GL_TEXTURE_2D, depthMap);
-        // glUniform1i(glGetUniformLocation(programID, "shadowMap"), 1);
-        // glUniformMatrix4fv(..., lightSpaceMatrix);
-        ground.render(viewMatrix, projectionMatrix, cameraPos, sunPosition, sunColor, lightSpaceMatrix, depthMap);
-
-        // --- RENDER TREES ---
-        tree.render(viewMatrix, projectionMatrix, cameraPos, sunPosition, sunColor, lightSpaceMatrix, depthMap);
-
-
-        // FPS tracking
-        // Count number of frames over a few seconds and take average
-        frames++;
-        fTime += deltaTime;
-        if (fTime > 2.0f) {
-            float fps = frames / fTime;
-            frames = 0;
-            fTime = 0;
-
-            std::stringstream stream;
-            stream << std::fixed << std::setprecision(2) << "Final Project | Frames per second (FPS): " << fps;
-            glfwSetWindowTitle(window, stream.str().c_str());
-        }
-
-        glfwSwapBuffers(window);
-        glfwPollEvents();
-
-    }
-    while (!glfwWindowShouldClose(window));
-
-    skybox.cleanup();
-    ground.cleanup();
-    snow.cleanup();
-    tree.cleanup();
-
-    glfwTerminate();
-
-    return 0;
 }
 
 // --------------------------------------------------------------------------------
-// Input Processing with Height Constraints
+// Helper: Update Sun Position and Color based on Time
+// --------------------------------------------------------------------------------
+static void updateSun(float timeValue) {
+    float cycleSpeed = 0.02f;
+    float time = timeValue * cycleSpeed;
+    float radius = 500.0f;
+
+    // Orbit Logic
+    sunPosition.x = sin(time) * radius;
+    sunPosition.y = cos(time) * radius;
+    sunPosition.z = 450.0f;
+
+    // Color Logic
+    if (sunPosition.y > 0.0f) {
+        float heightFactor = glm::clamp(sunPosition.y / radius, 0.0f, 1.0f);
+        glm::vec3 noonColor = glm::vec3(1.0f, 0.9f, 0.8f);
+        glm::vec3 sunsetColor = glm::vec3(1.0f, 0.4f, 0.0f);
+        sunColor = glm::mix(sunsetColor, noonColor, heightFactor) * 1.5f;
+    } else {
+        sunColor = glm::vec3(0.05f, 0.05f, 0.15f);
+    }
+}
+
+// --------------------------------------------------------------------------------
+// Input Processing
 // --------------------------------------------------------------------------------
 void processInput(GLFWwindow *window)
 {
-    // Speed adjusted by deltaTime for consistency across framerates
     float cameraSpeed = 100.0f * deltaTime;
 
-    // Move Forward
     if (glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS)
         cameraPos += cameraSpeed * cameraFront;
-
-    // Move Backward
     if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS)
         cameraPos -= cameraSpeed * cameraFront;
-
-    // Strafe Left
     if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS)
         cameraPos -= glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed;
-
-    // Strafe Right
     if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS)
         cameraPos += glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed;
 
-    // --- Height Constraints ---
-    // Prevent going below ground (assuming ground is at y=0)
-    // We keep it slightly above 0 (e.g., 2.0f) so we don't clip into the floor texture.
-    if (cameraPos.y < 2.0f) {
-        cameraPos.y = 2.0f;
-    }
-
-    // Prevent going too high
-    if (cameraPos.y > 100.0f) {
-        cameraPos.y = 100.0f;
-    }
+    cameraPos.y = glm::clamp(cameraPos.y, 2.0f, 100.0f);
 }
 
 // --------------------------------------------------------------------------------
-// Mouse Callback for Rotation (Look)
+// Mouse Callback
 // --------------------------------------------------------------------------------
 void mouse_callback(GLFWwindow* window, double xposIn, double yposIn)
 {
     float xpos = static_cast<float>(xposIn);
     float ypos = static_cast<float>(yposIn);
 
-    if (firstMouse)
-    {
+    if (firstMouse) {
         lastX = xpos;
         lastY = ypos;
         firstMouse = false;
     }
 
-    float xoffset = xpos - lastX;
-    float yoffset = lastY - ypos; // Reversed since y-coordinates go from bottom to top
+    float xoffset = (xpos - lastX) * 0.1f;
+    float yoffset = (lastY - ypos) * 0.1f;
     lastX = xpos;
     lastY = ypos;
 
-    float sensitivity = 0.1f;
-    xoffset *= sensitivity;
-    yoffset *= sensitivity;
-
     yaw += xoffset;
     pitch += yoffset;
-
-    // Constrain pitch so screen doesn't flip
-    if (pitch > 89.0f)
-        pitch = 89.0f;
-    if (pitch < -89.0f)
-        pitch = -89.0f;
+    pitch = glm::clamp(pitch, -89.0f, 89.0f);
 
     glm::vec3 front;
     front.x = cos(glm::radians(yaw)) * cos(glm::radians(pitch));
@@ -410,19 +354,20 @@ void mouse_callback(GLFWwindow* window, double xposIn, double yposIn)
 }
 
 // --------------------------------------------------------------------------------
-// Key Callback (Handles single events like Quit or Reset)
+// Key Callback
 // --------------------------------------------------------------------------------
 void key_callback(GLFWwindow *window, int key, int scancode, int action, int mode)
 {
-    if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
-        glfwSetWindowShouldClose(window, GL_TRUE);
+    if (action == GLFW_PRESS) {
+        if (key == GLFW_KEY_ESCAPE)
+            glfwSetWindowShouldClose(window, GL_TRUE);
 
-    // Optional: Reset camera position
-    if (key == GLFW_KEY_R && action == GLFW_PRESS) {
-        cameraPos   = glm::vec3(0.0f, 10.0f, 150.0f);
-        cameraFront = glm::vec3(0.0f, 0.0f, -1.0f);
-        yaw = -90.0f;
-        pitch = 0.0f;
-        firstMouse = true;
+        if (key == GLFW_KEY_R) {
+            cameraPos   = glm::vec3(0.0f, 10.0f, 150.0f);
+            cameraFront = glm::vec3(0.0f, 0.0f, -1.0f);
+            yaw = -90.0f;
+            pitch = 0.0f;
+            firstMouse = true;
+        }
     }
 }
