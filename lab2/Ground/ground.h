@@ -7,7 +7,7 @@
 struct Ground {
     glm::vec3 scale;
 
-    // Geometry, Colors, Indices, UVs (Same as before)
+    // Geometry, Colors, Indices, UVs
     GLfloat vertex_buffer_data[12] = { -1.0f, 0.0f, 1.0f, 1.0f, 0.0f, 1.0f, 1.0f, 0.0f, -1.0f, -1.0f, 0.0f, -1.0f };
     GLfloat color_buffer_data[12] = { 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f };
     GLuint index_buffer_data[6] = { 0, 1, 2, 0, 2, 3 };
@@ -23,13 +23,16 @@ struct Ground {
     GLuint modelMatrixID;
     GLuint textureSamplerID;
     GLuint cameraPosID;
-    // --- NEW: Light Uniforms ---
     GLuint lightPosID;
     GLuint lightColorID;
 
+    // --- NEW: Shadow Uniforms ---
+    GLuint lightSpaceMatrixID;
+    GLuint shadowMapID;
+
     void initialize(glm::vec3 scale) {
         this->scale = scale;
-        textureID = LoadTextureTileBox("../lab2/images/snow.jpg"); // Ensure path is correct
+        textureID = LoadTextureTileBox("../lab2/images/snow.jpg");
 
         glGenVertexArrays(1, &vertexArrayID);
         glBindVertexArray(vertexArrayID);
@@ -57,13 +60,16 @@ struct Ground {
         textureSamplerID = glGetUniformLocation(programID, "textureSampler");
         cameraPosID = glGetUniformLocation(programID, "cameraPosition");
 
-        // --- Get Light Uniform Locations ---
         lightPosID = glGetUniformLocation(programID, "lightPos");
         lightColorID = glGetUniformLocation(programID, "lightColor");
+
+        // --- NEW: Get Shadow Uniform Locations ---
+        lightSpaceMatrixID = glGetUniformLocation(programID, "lightSpaceMatrix");
+        shadowMapID = glGetUniformLocation(programID, "shadowMap");
     }
 
-    // --- UPDATED RENDER SIGNATURE ---
-    void render(const glm::mat4& viewMatrix, const glm::mat4& projectionMatrix, glm::vec3 cameraPosition, glm::vec3 sunPos, glm::vec3 sunColor) {
+    // --- UPDATED RENDER SIGNATURE to accept Shadow Data ---
+    void render(const glm::mat4& viewMatrix, const glm::mat4& projectionMatrix, glm::vec3 cameraPosition, glm::vec3 sunPos, glm::vec3 sunColor, glm::mat4 lightSpaceMatrix, GLuint depthMapTexture) {
         glUseProgram(programID);
         glBindVertexArray(vertexArrayID);
 
@@ -81,17 +87,24 @@ struct Ground {
 
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBufferID);
 
+        // Bind Snow Texture to Unit 0
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, textureID);
         glUniform1i(textureSamplerID, 0);
 
-        glUniform3f(cameraPosID, cameraPosition.x, cameraPosition.y, cameraPosition.z);
+        // --- NEW: Bind Shadow Map to Unit 1 ---
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, depthMapTexture);
+        glUniform1i(shadowMapID, 1);
 
-        // --- Pass Light Data ---
+        // --- NEW: Send Light Space Matrix ---
+        glUniformMatrix4fv(lightSpaceMatrixID, 1, GL_FALSE, &lightSpaceMatrix[0][0]);
+
+        glUniform3f(cameraPosID, cameraPosition.x, cameraPosition.y, cameraPosition.z);
         glUniform3f(lightPosID, sunPos.x, sunPos.y, sunPos.z);
         glUniform3f(lightColorID, sunColor.x, sunColor.y, sunColor.z);
 
-        // Render Loop (Same as before)
+        // Render Loop
         float chunkSize = scale.x * 2.0f;
         int gridX = (int)floor(cameraPosition.x / chunkSize);
         int gridZ = (int)floor(cameraPosition.z / chunkSize);
@@ -117,6 +130,27 @@ struct Ground {
         glDisableVertexAttribArray(0);
         glDisableVertexAttribArray(1);
         glDisableVertexAttribArray(2);
+        glBindVertexArray(0);
+    }
+
+    void renderShadow(GLuint shaderID, const glm::mat4& lightSpaceMatrix) {
+        glBindVertexArray(vertexArrayID);
+        glEnableVertexAttribArray(0);
+        glBindBuffer(GL_ARRAY_BUFFER, vertexBufferID);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, 0);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBufferID);
+
+        GLuint modelLoc = glGetUniformLocation(shaderID, "model");
+        GLuint lightSpaceLoc = glGetUniformLocation(shaderID, "lightSpaceMatrix");
+
+        glUniformMatrix4fv(lightSpaceLoc, 1, GL_FALSE, &lightSpaceMatrix[0][0]);
+
+        glm::mat4 model = glm::scale(glm::mat4(1.0f), scale);
+        glUniformMatrix4fv(modelLoc, 1, GL_FALSE, &model[0][0]);
+
+        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, (void*)0);
+
+        glDisableVertexAttribArray(0);
         glBindVertexArray(0);
     }
 

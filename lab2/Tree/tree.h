@@ -8,7 +8,6 @@
 struct Tree {
     std::vector<glm::vec3> treePositions;
 
-
     GLfloat vertex_buffer_data[126] = {
         // Trunk Front
         -0.5f, 0.0f, 0.5f, 0.5f, 0.0f, 0.5f, 0.5f, 5.0f, 0.5f,
@@ -36,8 +35,7 @@ struct Tree {
     };
 
     GLfloat color_buffer_data[126] = {
-        // (Copy the same color data you had in your original tree.h here)
-        // Trunk (Brown) x 8 triangles (Trunk walls)
+        // Trunk (Brown)
         0.4f,0.2f,0.0f, 0.4f,0.2f,0.0f, 0.4f,0.2f,0.0f,  0.4f,0.2f,0.0f, 0.4f,0.2f,0.0f, 0.4f,0.2f,0.0f,
         0.4f,0.2f,0.0f, 0.4f,0.2f,0.0f, 0.4f,0.2f,0.0f,  0.4f,0.2f,0.0f, 0.4f,0.2f,0.0f, 0.4f,0.2f,0.0f,
         0.4f,0.2f,0.0f, 0.4f,0.2f,0.0f, 0.4f,0.2f,0.0f,  0.4f,0.2f,0.0f, 0.4f,0.2f,0.0f, 0.4f,0.2f,0.0f,
@@ -51,8 +49,6 @@ struct Tree {
         0.0f,0.4f,0.0f, 0.0f,0.4f,0.0f, 1.0f,1.0f,1.0f,
     };
 
-    // 3. Normals (NEW)
-    // Every 3 values correspond to 1 vertex.
     GLfloat normal_buffer_data[126] = {
         // Trunk Front (0, 0, 1)
         0,0,1, 0,0,1, 0,0,1,  0,0,1, 0,0,1, 0,0,1,
@@ -64,7 +60,7 @@ struct Tree {
         1,0,0, 1,0,0, 1,0,0,  1,0,0, 1,0,0, 1,0,0,
         // Trunk Bottom (0, -1, 0)
         0,-1,0, 0,-1,0, 0,-1,0,  0,-1,0, 0,-1,0, 0,-1,0,
-        // Leaves Front (Approximate Slant)
+        // Leaves Front
         0,0.5,1, 0,0.5,1, 0,0.5,1,
         // Leaves Right
         1,0.5,0, 1,0.5,0, 1,0.5,0,
@@ -79,8 +75,11 @@ struct Tree {
     GLuint programID;
     GLuint mvpMatrixID, modelMatrixID, lightPosID, lightColorID;
 
+    // --- NEW: Shadow Uniforms ---
+    GLuint lightSpaceMatrixID;
+    GLuint shadowMapID;
+
     void initialize(int numTrees, float range) {
-        // Random generation...
         for (int i = 0; i < numTrees; i++) {
             float x = ((float)rand() / RAND_MAX) * (range * 2) - range;
             float z = ((float)rand() / RAND_MAX) * (range * 2) - range;
@@ -99,7 +98,6 @@ struct Tree {
         glBindBuffer(GL_ARRAY_BUFFER, colorBufferID);
         glBufferData(GL_ARRAY_BUFFER, sizeof(color_buffer_data), color_buffer_data, GL_STATIC_DRAW);
 
-        // --- Bind Normal Buffer ---
         glGenBuffers(1, &normalBufferID);
         glBindBuffer(GL_ARRAY_BUFFER, normalBufferID);
         glBufferData(GL_ARRAY_BUFFER, sizeof(normal_buffer_data), normal_buffer_data, GL_STATIC_DRAW);
@@ -110,9 +108,14 @@ struct Tree {
         modelMatrixID = glGetUniformLocation(programID, "M");
         lightPosID = glGetUniformLocation(programID, "lightPos");
         lightColorID = glGetUniformLocation(programID, "lightColor");
+
+        // --- NEW: Get Shadow Uniform Locations ---
+        lightSpaceMatrixID = glGetUniformLocation(programID, "lightSpaceMatrix");
+        shadowMapID = glGetUniformLocation(programID, "shadowMap");
     }
 
-    void render(const glm::mat4& viewMatrix, const glm::mat4& projectionMatrix, glm::vec3 cameraPos, glm::vec3 sunPos, glm::vec3 sunColor) {
+    // --- UPDATED RENDER SIGNATURE to accept Shadow Data ---
+    void render(const glm::mat4& viewMatrix, const glm::mat4& projectionMatrix, glm::vec3 cameraPos, glm::vec3 sunPos, glm::vec3 sunColor, glm::mat4 lightSpaceMatrix, GLuint depthMapTexture) {
         glUseProgram(programID);
         glBindVertexArray(vertexArrayID);
         glDisable(GL_CULL_FACE);
@@ -125,12 +128,18 @@ struct Tree {
         glBindBuffer(GL_ARRAY_BUFFER, colorBufferID);
         glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, 0);
 
-        // --- Enable Normals (Attribute 2) ---
         glEnableVertexAttribArray(2);
         glBindBuffer(GL_ARRAY_BUFFER, normalBufferID);
         glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 0, 0);
 
-        // Pass Light
+        // --- NEW: Bind Shadow Map to Unit 1 ---
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, depthMapTexture);
+        glUniform1i(shadowMapID, 1);
+
+        // --- NEW: Send Light Space Matrix ---
+        glUniformMatrix4fv(lightSpaceMatrixID, 1, GL_FALSE, &lightSpaceMatrix[0][0]);
+
         glUniform3f(lightPosID, sunPos.x, sunPos.y, sunPos.z);
         glUniform3f(lightColorID, sunColor.x, sunColor.y, sunColor.z);
 
@@ -138,7 +147,6 @@ struct Tree {
         float worldSize = range * 2.0f;
 
         for (auto& pos : treePositions) {
-            // Infinite forest logic...
             float dx = cameraPos.x - pos.x;
             float dz = cameraPos.z - pos.z;
             if (dx > range) pos.x += worldSize;
@@ -156,7 +164,6 @@ struct Tree {
             glm::mat4 mvp = projectionMatrix * viewMatrix * modelMatrix;
 
             glUniformMatrix4fv(mvpMatrixID, 1, GL_FALSE, &mvp[0][0]);
-            // Pass Model Matrix (Important for normals!)
             glUniformMatrix4fv(modelMatrixID, 1, GL_FALSE, &modelMatrix[0][0]);
 
             glDrawArrays(GL_TRIANGLES, 0, 42);
@@ -167,6 +174,42 @@ struct Tree {
         glDisableVertexAttribArray(2);
         glBindVertexArray(0);
         glEnable(GL_CULL_FACE);
+    }
+
+    void renderShadow(GLuint shaderID, const glm::mat4& lightSpaceMatrix, glm::vec3 cameraPos) {
+        glBindVertexArray(vertexArrayID);
+        glEnableVertexAttribArray(0);
+        glBindBuffer(GL_ARRAY_BUFFER, vertexBufferID);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, 0);
+
+        GLuint modelLoc = glGetUniformLocation(shaderID, "model");
+        GLuint lightSpaceLoc = glGetUniformLocation(shaderID, "lightSpaceMatrix");
+        glUniformMatrix4fv(lightSpaceLoc, 1, GL_FALSE, &lightSpaceMatrix[0][0]);
+
+        float range = 300.0f;
+        float worldSize = range * 2.0f;
+
+        for (auto& pos : treePositions) {
+            glm::vec3 renderPos = pos;
+            float dx = cameraPos.x - renderPos.x;
+            float dz = cameraPos.z - renderPos.z;
+            if (dx > range) renderPos.x += worldSize;
+            else if (dx < -range) renderPos.x -= worldSize;
+            if (dz > range) renderPos.z += worldSize;
+            else if (dz < -range) renderPos.z -= worldSize;
+
+            if (glm::distance(renderPos, cameraPos) > 300.0f) continue;
+
+            glm::mat4 model = glm::translate(glm::mat4(1.0f), renderPos);
+            float randomVal = (sin(renderPos.x * 0.13f) * cos(renderPos.z * 0.17f)) * 0.5f + 0.5f;
+            float s = 2.0f + (randomVal * 4.0f);
+            model = glm::scale(model, glm::vec3(s, s * 1.2f, s));
+
+            glUniformMatrix4fv(modelLoc, 1, GL_FALSE, &model[0][0]);
+            glDrawArrays(GL_TRIANGLES, 0, 42);
+        }
+        glDisableVertexAttribArray(0);
+        glBindVertexArray(0);
     }
 
     void cleanup() {

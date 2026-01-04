@@ -45,6 +45,12 @@ static float lastY =  768.0f / 2.0;
 static float deltaTime = 0.0f;	// Time between current frame and last frame
 static float lastFrame = 0.0f;
 
+// Shadow Map resolution (High res for sharper shadows)
+const unsigned int SHADOW_WIDTH = 2048, SHADOW_HEIGHT = 2048;
+GLuint depthMapFBO;
+GLuint depthMap;
+GLuint depthShaderID; // For the simple depth render
+
 // -------------------------------
 
 static GLuint LoadTextureTileBox(const char *texture_file_path) {
@@ -168,6 +174,27 @@ int main(void)
     int frames = 0;
     float fTime = 0.0f;
 
+    // --- SHADOW MAP INIT ---
+    glGenFramebuffers(1, &depthMapFBO);
+    glGenTextures(1, &depthMap);
+    glBindTexture(GL_TEXTURE_2D, depthMap);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, SHADOW_WIDTH, SHADOW_HEIGHT, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+    float borderColor[] = { 1.0, 1.0, 1.0, 1.0 };
+    glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor);
+
+    glBindFramebuffer(GL_FRAMEBUFFER, depthMapFBO);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depthMap, 0);
+    glDrawBuffer(GL_NONE);
+    glReadBuffer(GL_NONE);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    // Load the new simple depth shader
+    depthShaderID = LoadShadersFromFile("../lab2/Shadow/depth.vert", "../lab2/Shadow/depth.frag");
+
     do
     {
         // Calculate deltaTime
@@ -224,15 +251,56 @@ int main(void)
             sunColor = glm::vec3(0.05f, 0.05f, 0.15f);
         }
 
-        // --- RENDER WITH LIGHTING ---
-        // You must update the .render() methods in your Ground, Snow, and Tree classes
-        // to accept the sunPosition and sunColor arguments.
+        // --------------------------------------------------------------
+        // STEP 1: RENDER DEPTH OF SCENE TO TEXTURE (FROM SUN)
+        // --------------------------------------------------------------
 
-        ground.render(viewMatrix, projectionMatrix, cameraPos, sunPosition, sunColor);
+        // 1. Configure Light Matrix
+        // Since it's a Sun, we use Orthographic projection (Parallel rays)
+        float near_plane = 1.0f, far_plane = 1000.0f;
+        float orthoSize = 150.0f; // Covers 150 units around the player
+        glm::mat4 lightProjection = glm::ortho(-orthoSize, orthoSize, -orthoSize, orthoSize, near_plane, far_plane);
 
-        snow.render(viewMatrix, projectionMatrix, deltaTime, cameraPos);
+        // The Sun "Camera" looks at the player's position, from the sun direction
+        glm::vec3 lightPos = cameraPos + glm::normalize(sunPosition) * 300.0f;
+        glm::mat4 lightView = glm::lookAt(lightPos, cameraPos, glm::vec3(0.0, 1.0, 0.0));
+        glm::mat4 lightSpaceMatrix = lightProjection * lightView;
 
-        tree.render(viewMatrix, projectionMatrix, cameraPos, sunPosition, sunColor);
+        // 2. Render to Depth FBO
+        glViewport(0, 0, SHADOW_WIDTH, SHADOW_HEIGHT);
+        glBindFramebuffer(GL_FRAMEBUFFER, depthMapFBO);
+        glClear(GL_DEPTH_BUFFER_BIT);
+
+        glUseProgram(depthShaderID);
+        // Render objects using the new renderShadow methods
+        ground.renderShadow(depthShaderID, lightSpaceMatrix);
+        tree.renderShadow(depthShaderID, lightSpaceMatrix, cameraPos);
+
+        glBindFramebuffer(GL_FRAMEBUFFER, 0); // Unbind
+
+        // --------------------------------------------------------------
+        // STEP 2: RENDER SCENE NORMALLY (WITH SHADOW MAP)
+        // --------------------------------------------------------------
+
+        // Reset viewport
+        int w, h;
+        glfwGetFramebufferSize(window, &w, &h);
+        glViewport(0, 0, w, h);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+        viewMatrix = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
+
+        // --- RENDER GROUND ---
+        // You need to update ground.render to accept lightSpaceMatrix and the depthMap texture ID
+        // Inside ground.render, ensure you:
+        // glActiveTexture(GL_TEXTURE1); glBindTexture(GL_TEXTURE_2D, depthMap);
+        // glUniform1i(glGetUniformLocation(programID, "shadowMap"), 1);
+        // glUniformMatrix4fv(..., lightSpaceMatrix);
+        ground.render(viewMatrix, projectionMatrix, cameraPos, sunPosition, sunColor, lightSpaceMatrix, depthMap);
+
+        // --- RENDER TREES ---
+        tree.render(viewMatrix, projectionMatrix, cameraPos, sunPosition, sunColor, lightSpaceMatrix, depthMap);
+
 
         // FPS tracking
         // Count number of frames over a few seconds and take average
