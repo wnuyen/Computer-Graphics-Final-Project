@@ -8,12 +8,8 @@
 struct Tree {
     std::vector<glm::vec3> treePositions;
 
-    // --- SETTINGS: CHANGE THESE TO MOVE/RESIZE THE CIRCLE ---
     glm::vec2 clearingCenter = glm::vec2(-80.0f, 50.0f);
     float clearingRadius = 170.0f;
-    // -------------------------------------------------------
-
-    // Store the range so Render knows when to wrap
     float worldHalfWidth = 2000.0f;
 
     GLfloat vertex_buffer_data[126] = {
@@ -100,8 +96,6 @@ struct Tree {
             float x = ((float)rand() / RAND_MAX) * (range * 2) - range;
             float z = ((float)rand() / RAND_MAX) * (range * 2) - range;
 
-            // Optional: You can check clearing here, but it's more important in render
-            // because the trees move/wrap.
             treePositions.push_back(glm::vec3(x, 0.0f, z));
         }
 

@@ -277,9 +277,7 @@ struct MyBot {
          return;
       }
 
-      // --- ADD THIS LINE ---
       loadTextures(model);
-      // --------------------
 
       primitiveObjects = bindModel(model);
       skinObjects = prepareSkinning(model);
@@ -291,10 +289,7 @@ struct MyBot {
       lightPositionID = glGetUniformLocation(programID, "lightPosition");
       lightIntensityID = glGetUniformLocation(programID, "lightIntensity");
       jointMatricesID = glGetUniformLocation(programID, "jointMatrices");
-
-      // --- ADD THIS LINE ---
       textureSamplerID = glGetUniformLocation(programID, "diffuseTexture");
-      // --------------------
    }
 
     void bindMesh(std::vector<PrimitiveObject> &primitiveObjects, tinygltf::Model &model, tinygltf::Mesh &mesh) {
@@ -360,7 +355,6 @@ struct MyBot {
          tinygltf::Primitive primitive = mesh.primitives[i];
          tinygltf::Accessor indexAccessor = model.accessors[primitive.indices];
 
-         // --- TEXTURE BINDING LOGIC ---
          if (primitive.material >= 0) {
             tinygltf::Material &mat = model.materials[primitive.material];
             // Look for baseColorTexture in PBR metallic roughness
@@ -371,7 +365,6 @@ struct MyBot {
                glUniform1i(textureSamplerID, 0); // Tell shader to use texture unit 0
             }
          }
-         // -----------------------------
 
          glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, vbos.at(indexAccessor.bufferView));
          glDrawElements(primitive.mode, indexAccessor.count, indexAccessor.componentType, BUFFER_OFFSET(indexAccessor.byteOffset));
@@ -388,7 +381,6 @@ struct MyBot {
        for (size_t i = 0; i < scene.nodes.size(); ++i) drawModelNodes(primitiveObjects, model, model.nodes[scene.nodes[i]]);
     }
 
-    // UPDATED RENDER FUNCTION for the world
     void render(glm::mat4 view, glm::mat4 projection, glm::mat4 modelMatrix, glm::vec3 lightPos, glm::vec3 lightInt) {
        glUseProgram(programID);
 

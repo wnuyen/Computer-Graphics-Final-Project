@@ -22,7 +22,6 @@ struct Snow {
     // Uniform IDs
     GLuint mvpMatrixID;
     GLuint colorID;
-    // NEW: Lighting Uniforms
     GLuint lightPosID;
     GLuint lightColorID;
     GLuint lightSpaceMatrixID;
@@ -38,7 +37,6 @@ struct Snow {
         mvpMatrixID = glGetUniformLocation(programID, "MVP");
         colorID     = glGetUniformLocation(programID, "snowColor");
 
-        // NEW: Get locations for lighting uniforms
         lightPosID         = glGetUniformLocation(programID, "lightPos");
         lightColorID       = glGetUniformLocation(programID, "lightColor");
         lightSpaceMatrixID = glGetUniformLocation(programID, "lightSpaceMatrix");
@@ -71,7 +69,6 @@ struct Snow {
         glBindVertexArray(0);
     }
 
-    // UPDATED RENDER FUNCTION
     void render(const glm::mat4& viewMatrix, const glm::mat4& projectionMatrix, float deltaTime, glm::vec3 cameraPos,
                 glm::vec3 sunPos, glm::vec3 sunColor, glm::mat4 lightSpaceMatrix, GLuint depthMapTexture) {
 
@@ -113,12 +110,10 @@ struct Snow {
         glUniformMatrix4fv(mvpMatrixID, 1, GL_FALSE, &mvp[0][0]);
         glUniform3f(colorID, 1.0f, 1.0f, 1.0f);
 
-        // --- NEW: Send Lighting Data ---
         glUniform3f(lightPosID, sunPos.x, sunPos.y, sunPos.z);
         glUniform3f(lightColorID, sunColor.x, sunColor.y, sunColor.z);
         glUniformMatrix4fv(lightSpaceMatrixID, 1, GL_FALSE, &lightSpaceMatrix[0][0]);
 
-        // --- NEW: Bind Shadow Map ---
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, depthMapTexture);
         glUniform1i(shadowMapID, 0);

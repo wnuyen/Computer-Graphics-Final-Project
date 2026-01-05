@@ -26,7 +26,6 @@ struct Ground {
     GLuint lightPosID;
     GLuint lightColorID;
 
-    // --- NEW: Shadow Uniforms ---
     GLuint lightSpaceMatrixID;
     GLuint shadowMapID;
 
@@ -63,12 +62,10 @@ struct Ground {
         lightPosID = glGetUniformLocation(programID, "lightPos");
         lightColorID = glGetUniformLocation(programID, "lightColor");
 
-        // --- NEW: Get Shadow Uniform Locations ---
         lightSpaceMatrixID = glGetUniformLocation(programID, "lightSpaceMatrix");
         shadowMapID = glGetUniformLocation(programID, "shadowMap");
     }
 
-    // --- UPDATED RENDER SIGNATURE to accept Shadow Data ---
     void render(const glm::mat4& viewMatrix, const glm::mat4& projectionMatrix, glm::vec3 cameraPosition, glm::vec3 sunPos, glm::vec3 sunColor, glm::mat4 lightSpaceMatrix, GLuint depthMapTexture) {
         glUseProgram(programID);
         glBindVertexArray(vertexArrayID);
@@ -92,12 +89,10 @@ struct Ground {
         glBindTexture(GL_TEXTURE_2D, textureID);
         glUniform1i(textureSamplerID, 0);
 
-        // --- NEW: Bind Shadow Map to Unit 1 ---
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_2D, depthMapTexture);
         glUniform1i(shadowMapID, 1);
 
-        // --- NEW: Send Light Space Matrix ---
         glUniformMatrix4fv(lightSpaceMatrixID, 1, GL_FALSE, &lightSpaceMatrix[0][0]);
 
         glUniform3f(cameraPosID, cameraPosition.x, cameraPosition.y, cameraPosition.z);

@@ -7,8 +7,8 @@ layout(location = 2) in vec3 vertexNormal; // This matches the new buffer in tre
 
 // Output data
 out vec3 fragmentColor;
-out vec3 Normal;   // Required for lighting
-out vec3 FragPos;  // Required for lighting
+out vec3 Normal;
+out vec3 FragPos;
 
 uniform mat4 MVP;
 uniform mat4 M; // Model Matrix

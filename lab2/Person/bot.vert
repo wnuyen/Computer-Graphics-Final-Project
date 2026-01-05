@@ -4,15 +4,15 @@
 // These locations must match the "vaa" logic in person.h
 layout(location = 0) in vec3 position;
 layout(location = 1) in vec3 normal;
-layout(location = 2) in vec2 texCoord;      // <--- Added (Required for texture)
-layout(location = 3) in vec4 jointIndices;  // Changed to vec4 for compatibility
+layout(location = 2) in vec2 texCoord;
+layout(location = 3) in vec4 jointIndices;
 layout(location = 4) in vec4 jointWeights;
 
 // --- OUTPUTS ---
 // These go to the Fragment Shader
 out vec3 vPosition;
 out vec3 vNormal;
-out vec2 vTexCoord;                         // <--- Added
+out vec2 vTexCoord;
 
 // --- UNIFORMS ---
 uniform mat4 MVP;
@@ -40,7 +40,6 @@ void main() {
             totalLocalPos += posePosition * weight;
 
             // Accumulate Normal: (Matrix * Normal) * Weight
-            // Note: We use 0.0 for w because normals are directions, not positions
             vec4 poseNormal = jointTransform * vec4(normal, 0.0);
             totalNormal += poseNormal * weight;
         }

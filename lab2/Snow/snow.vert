@@ -5,11 +5,11 @@ layout(location = 0) in vec3 vertexPosition_worldspace;
 
 // Uniforms
 uniform mat4 MVP;
-uniform mat4 lightSpaceMatrix; // NEW: Needed for shadows
+uniform mat4 lightSpaceMatrix;
 
 // Outputs to Fragment Shader
-out vec3 FragPos;            // NEW: World position for lighting
-out vec4 FragPosLightSpace;  // NEW: Position in light space for shadows
+out vec3 FragPos;
+out vec4 FragPosLightSpace;
 
 void main(){
     // 1. Pass World Position to Fragment Shader
